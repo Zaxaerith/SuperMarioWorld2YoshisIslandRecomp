@@ -1,0 +1,15 @@
+stdout.txt
+stderr.txt
+snes9x.debugger.cfg
+Logs/*
+Cheats/*
+Roms/*
+Saves/*
+Movies/*
+Screenshots/*
+ge.xml
+sfx_trace.txt
+sfx_trace3.txt
+*.inp
+*.sav
+*.ini

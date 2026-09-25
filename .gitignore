@@ -1,0 +1,74 @@
+# =============================================================================
+# Yoshi's Island Recomp - .gitignore
+# =============================================================================
+
+# Build outputs & caches
+build/
+bin/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.ninja
+.ninja_*
+
+# Compiled binaries and libraries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.idb
+
+# Allow vendor SDL2 prebuilt dependencies for zero-setup Windows builds
+!vendor/SDL2/lib/*.lib
+!vendor/SDL2/bin/*.dll
+
+# IMPORTANT: Copyrighted Nintendo ROMs (DO NOT COMMIT COMMERCIAL ROMS)
+*.sfc
+*.smc
+*.fig
+*.swc
+yi.sfc
+
+# SRAM save states and save RAM
+*.srm
+*.sav
+*.state*
+save.srm
+
+# Debug dumps, temporary images and logs
+*.ppm
+*.sym
+*.log
+out.txt
+screenshot_*.png
+test_*.png
+logo_*.png
+
+# Python byte-code
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE & Editor configs
+.vscode/
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
