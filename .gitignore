@@ -53,6 +53,9 @@ screenshot_*.png
 test_*.png
 logo_*.png
 
+# Reference external disassembly project
+yoshisisland-disassembly-master/
+
 # Python byte-code
 __pycache__/
 *.py[cod]

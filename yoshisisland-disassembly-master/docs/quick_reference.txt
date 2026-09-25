@@ -1,4 +1,0 @@
-REP #$20 == 16-bit A
-SEP #$20 == 8-bit A
-REP #$10 == 16-bit X
-SEP #$10 == 8-bit X
