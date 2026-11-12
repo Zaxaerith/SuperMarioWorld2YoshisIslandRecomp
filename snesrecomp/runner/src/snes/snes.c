@@ -354,6 +354,16 @@ uint16_t SwapInputBits(uint16_t x) {
   return joypad_auto_read_word(x);
 }
 
+/* Render the completed line before HDMA installs next-line register state.
+ * Scanout remains active when a host disables beam-owned HDMA. */
+static void snes_hblank(Snes *snes, unsigned line) {
+  snes->hPos = 1024;
+  snes->vPos = (uint16_t)line;
+  if (snes->scanlineHook)
+    snes->scanlineHook(snes, line, snes->scanlineHookContext);
+  if (!snes->hdmaBeamOff) dma_doHdma(snes->dma);
+}
+
 /* Returns the master clocks actually consumed. Normally == clocks; less when
  * the walk LATCHES an IRQ, where it stops one clock past the comparator match
  * and leaves the remainder pending. An IRQ pre-empts: beam time between the
@@ -455,8 +465,8 @@ static uint32_t snes_advance_beam(Snes *snes, uint32_t clocks, bool check_irq) {
      * mode-7 shaft in mode 1, a full screen of garbage under an intact HUD.
      * It fired from inside guest register writes, because those sync the
      * master clock and the beam advance runs HDMA. One call, gated. */
-    if (check_irq && !snes->hdmaBeamOff && v < 225u && h == 1024u)
-      dma_doHdma(snes->dma);
+    if (check_irq && v < 225u && h == 1024u)
+      snes_hblank(snes, v);
     if (h >= 1364u) {
       h = 0;
       v++;

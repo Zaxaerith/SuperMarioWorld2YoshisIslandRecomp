@@ -5,7 +5,6 @@
 #include "common_rtl.h"
 #include "cpu_state.h"
 #include "snes/snes.h"
-#include "snes/dma.h"
 #include "snes/ppu.h"
 #include "snes/superfx.h"
 #include "snes/interp_bridge.h"
@@ -22,29 +21,25 @@ static int parked;
 uint64_t yi_nmi_count, yi_irq_count, yi_max_late;
 uint64_t yi_total_slices;
 
+/* A CPU slice or interrupt may cross multiple HBlank edges before returning.
+ * Render at each beam edge, before HDMA installs the next line's state. */
+static void render_scanline(Snes *snes, unsigned line, void *context) {
+  (void)context;
+  if (snes->ppu->renderBuffer)
+    ppu_runLine(snes->ppu, (int)line);
+}
+
 static uint32_t vector(uint32_t adr) {
   return snes_read(g_snes, adr) | ((uint32_t)snes_read(g_snes, adr + 1) << 8);
 }
 
 static void interrupt_at(uint32_t adr) {
-  DmaChannel saved_ch0;
-  if (g_snes && g_snes->dma) {
-    saved_ch0 = g_snes->dma->channel[0];
-  }
-
   cpu_push_interrupt_frame_at(&g_cpu, resume_pc);
   interp_bridge_set_master_deadline(0);
   if (!interp_bridge_run_interrupt(&g_cpu, vector(adr))) {
     Die("interrupt did not reach RTI");
   }
 
-  if (g_snes && g_snes->dma) {
-    g_snes->dma->channel[0].bAdr = saved_ch0.bAdr;
-    g_snes->dma->channel[0].mode = saved_ch0.mode;
-    g_snes->dma->channel[0].aAdr = saved_ch0.aAdr;
-    g_snes->dma->channel[0].aBank = saved_ch0.aBank;
-    g_snes->dma->channel[0].size = saved_ch0.size;
-  }
   parked = 0;
 }
 
@@ -111,7 +106,8 @@ void GameRunOneFrame(void) {
       g_snes->hPos = 0;
       g_snes->vPos = 0;
     }
-    ppu_runLine(g_ppu, 0);
+    g_snes->scanlineHook = render_scanline;
+    g_snes->scanlineHookContext = NULL;
   }
 
   for (unsigned line = 0; line < SCANLINES_PER_FRAME; ++line) {
@@ -130,7 +126,6 @@ void GameRunOneFrame(void) {
       /* Advance beam to active display area (before HBlank HDMA at h=1024) */
       uint64_t active_deadline = s_frame_base_clock + (uint64_t)line * MASTER_CYCLES_PER_LINE + 1000;
       run_scanline(active_deadline);
-      ppu_runLine(g_ppu, (int)line);
     }
 
     uint64_t line_deadline = s_frame_base_clock + (uint64_t)(line + 1) * MASTER_CYCLES_PER_LINE;
