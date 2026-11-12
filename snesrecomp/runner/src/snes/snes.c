@@ -38,7 +38,7 @@ bool snes_next_irq_master(const Snes *snes, uint64_t now, uint64_t *out) {
   uint32_t h = snes->hPos;
   uint32_t v = snes->vPos;
   uint64_t delta = 0;
-  for (uint32_t scanned = 0; scanned <= 262u; scanned++) {
+  for (uint32_t scanned = 0; scanned <= snes_frame_lines(snes); scanned++) {
     const bool line_matches = !snes->vIrqEnabled || v == snes->vTimer;
     if (line_matches && target_h >= h) {
       *out = now + delta + (uint64_t)(target_h - h);
@@ -46,7 +46,7 @@ bool snes_next_irq_master(const Snes *snes, uint64_t now, uint64_t *out) {
     }
     delta += 1364u - h;
     h = 0;
-    v = (v + 1u) % 262u;
+    v = (v + 1u) % snes_frame_lines(snes);
   }
   return false;
 }
@@ -66,6 +66,12 @@ static void snes_trace_direct_wram_write(uint32_t off, uint8_t old, uint8_t val)
 
 void snes_set_hdma_beam_enabled(Snes *snes, bool enabled) {
   snes->hdmaBeamOff = !enabled;
+}
+
+void snes_set_pal(Snes *snes, bool pal) {
+  if (!snes) return;
+  snes->pal = pal;
+  snes->ppu->pal = pal;
 }
 
 Snes* snes_init(uint8_t *ram) {
@@ -430,7 +436,7 @@ static uint32_t snes_advance_beam(Snes *snes, uint32_t clocks, bool check_irq) {
         snes->dbgLatchedThisField = 1;
         h += upto;
         consumed += upto;
-        if (h >= 1364u) { h = 0; v++; if (v >= 262u) v = 0; }
+        if (h >= 1364u) { h = 0; v++; if (v >= snes_frame_lines(snes)) v = 0; }
         snes->hPos = (uint16_t)h;
         snes->vPos = (uint16_t)v;
         snes->inVblank = v >= 225u;
@@ -460,7 +466,7 @@ static uint32_t snes_advance_beam(Snes *snes, uint32_t clocks, bool check_irq) {
     if (h >= 1364u) {
       h = 0;
       v++;
-      if (v >= 262u) {
+      if (v >= snes_frame_lines(snes)) {
         v = 0;
         if (check_irq && !snes->hdmaBeamOff)
           dma_initHdma(snes->dma);
@@ -502,11 +508,11 @@ void snes_advance_master_cycles(Snes *snes, uint32_t clocks) {
  * lost its first link on every single frame. */
 uint32_t snes_master_clocks_until_line(const Snes *snes, uint32_t line) {
   uint32_t h, v, lines;
-  if (!snes || line >= 262u) return 0;
+  if (!snes || line >= snes_frame_lines(snes)) return 0;
   h = snes->hPos;
   v = snes->vPos;
   if (v == line && h == 0u) return 0;
-  lines = (line > v) ? (line - v) : (262u - v + line);
+  lines = (line > v) ? (line - v) : (snes_frame_lines(snes) - v + line);
   return lines * 1364u - h;
 }
 
@@ -530,10 +536,10 @@ uint32_t snes_master_clocks_until_irq(const Snes *snes) {
     uint32_t target_v = snes->vTimer;
     uint32_t lines;
     uint64_t d;
-    if (target_v >= 262u) return 0;
+    if (target_v >= snes_frame_lines(snes)) return 0;
     if (target_v > v)      lines = target_v - v;
-    else if (target_v < v) lines = 262u - v + target_v;
-    else                   lines = (target_h > h) ? 0u : 262u;
+    else if (target_v < v) lines = snes_frame_lines(snes) - v + target_v;
+    else                   lines = (target_h > h) ? 0u : snes_frame_lines(snes);
     /* lines==0 implies target_h>h, so this stays positive; every other branch
        adds at least a whole line, so the subtraction cannot underflow. */
     d = (uint64_t)lines * 1364u + (uint64_t)target_h - (uint64_t)h;

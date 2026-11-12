@@ -205,6 +205,7 @@ struct Ppu {
   int32_t m7startX;
   int32_t m7startY;
   // settings
+  bool pal; /* Host region, outside the serialized PPU spans. */
   bool evenFrame;
   bool frameOverscan; // if we are overscanning this frame (determined at 0,225)
   bool frameInterlace; // if we are interlacing this frame (determined at start vblank)

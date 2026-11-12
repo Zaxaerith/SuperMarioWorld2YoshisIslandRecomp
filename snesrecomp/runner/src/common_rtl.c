@@ -262,6 +262,8 @@ static int16 g_audio_last_output_r;
 static void rtl_sync_apu_frame_boundary(void);
 
 static uint64_t rtl_apu_guest_cycle(void) {
+  if (g_snes && g_snes->pal)
+    return (uint64_t)((double)g_cpu.master_cycles * snes_apu_per_master(g_snes));
   if (g_extended_frame_timing)
     return rtl_apu_clock_now(&g_apu_frame_clock, g_cpu.master_cycles);
   uint64_t within = g_cpu.master_cycles - g_apu_frame_start_master;
@@ -2040,7 +2042,7 @@ static void rtl_sync_apu_frame_boundary(void) {
   /* RtlRunFrame has already incremented snes_frame_counter. This is the exact
    * boundary after the completed frame; adding its stale within-frame master
    * offset here would count the frame body twice. */
-  uint64_t boundary = g_extended_frame_timing
+  uint64_t boundary = g_snes->pal ? rtl_apu_guest_cycle() : g_extended_frame_timing
       ? rtl_apu_clock_finish(&g_apu_frame_clock, g_cpu.master_cycles)
       : (uint64_t)snes_frame_counter * RTL_APU_CYCLES_PER_FRAME;
   bool synced = apu_runToGuestCycle(g_snes->apu, boundary,

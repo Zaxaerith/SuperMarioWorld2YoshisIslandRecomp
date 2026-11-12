@@ -62,23 +62,34 @@ int main(int argc, char **argv) {
   fseek(f, 0, SEEK_END);
   long size = ftell(f);
   rewind(f);
-  if (size != 2097152) {
-    printf("[Warning] Expected 2,097,152 bytes, got %ld bytes\n", size);
+  if (size != YI_ROM_SIZE && size != YI_ROM_SIZE + 512u) {
+    fprintf(stderr, "Unsupported ROM size: %ld\n", size);
+    fclose(f);
+    return 2;
   }
   uint8_t *rom = (uint8_t *)malloc(size);
   if (!rom || fread(rom, 1, size, f) != (size_t)size) {
     fprintf(stderr, "Error: failed to read ROM\n");
+    free(rom);
     fclose(f);
     return 2;
   }
   fclose(f);
 
+  YiRomProfile profile = YiIdentifyRom(rom, (size_t)size);
+  if (profile == YI_ROM_UNSUPPORTED) {
+    fprintf(stderr, "Unsupported ROM revision.\n");
+    free(rom);
+    return 2;
+  }
+  const uint8_t *payload = rom + (size == YI_ROM_SIZE + 512u ? 512 : 0);
   RtlRegisterGame(&kGameInfo);
-  if (!SnesInit(rom, (int)size)) {
+  if (!SnesInit(payload, YI_ROM_SIZE)) {
     fprintf(stderr, "Error: SnesInit failed!\n");
     free(rom);
     return 3;
   }
+  GameConfigureRom(profile);
   free(rom);
 
   if (!g_snes || !g_snes->cart || !g_snes->cart->superfx) {
@@ -90,9 +101,10 @@ int main(int argc, char **argv) {
   static uint8_t pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, pixels, 256 * 4, 0);
 
-  printf("[Host] Running %d frames of recompiled ROM code...\n", frames);
+  printf("[Host] Running %d frames...\n", frames);
   static int16_t dummy_audio[1024 * 2];
   RtlSetAudioOutputRate(32040);
+  const double samples_per_frame = 32040.0 / YiRomFrameRate(profile);
   for (int i = 0; i < frames; i++) {
     uint32_t pad = 0;
     int cur_f = i + 1;
@@ -110,7 +122,10 @@ int main(int argc, char **argv) {
     if (cur_f >= 1950 && cur_f <= 1980) pad = (1 << 3) | (1 << 8);
     RtlRunFrame(pad);
     GameDrawPpuFrame();
-    RtlRenderAudio(dummy_audio, 534, 2);
+    int audio_frames = YiRomIsPal(profile)
+        ? (int)(cur_f * samples_per_frame) - (int)((cur_f - 1) * samples_per_frame)
+        : 534;
+    RtlRenderAudio(dummy_audio, audio_frames, 2);
 
 
     if (cur_f == 150) save_ppm("screenshot_f150.ppm", pixels);

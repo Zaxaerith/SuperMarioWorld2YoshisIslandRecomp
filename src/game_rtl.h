@@ -2,6 +2,9 @@
 #define GAME_RTL_H
 
 #include "common_cpu_infra.h"
+#include "rom_profile.h"
+
+void GameConfigureRom(YiRomProfile profile);
 
 /* One frame of Super Mario World 2: Yoshi's Island */
 void GameRunOneFrame(void);

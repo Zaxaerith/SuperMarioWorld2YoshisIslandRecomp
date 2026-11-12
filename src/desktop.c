@@ -1,6 +1,6 @@
 /*
  * Super Mario World 2: Yoshi's Island (SNESRecomp Native AOT Desktop Player)
- * Real-time SDL2 interactive host: 60 FPS gameplay, authentic PPU/APU, SuperFX GSU,
+ * Real-time SDL2 interactive host: PAL/NTSC gameplay, authentic PPU/APU, SuperFX GSU,
  * native recomp-ui launcher GUI, single-player controller mapping and SRAM saves.
  */
 #include <stdio.h>
@@ -30,8 +30,6 @@
 #include "launcher_cache.h"
 #include "host_paths.h"
 #include "keybinds.h"
-#include "crc32.h"
-#include "sha256.h"
 #include "desktop/display_aspect.h"
 #include "desktop/launcher_video.h"
 #endif
@@ -58,14 +56,8 @@ static void cleanup_timer_precision(void) {
 struct SpcPlayer *g_spc_player = NULL;
 bool g_new_ppu = true;
 
-static const uint8_t kExpectedSha256[32] = {
-    0x9b, 0x49, 0x57, 0x46, 0x67, 0x98, 0xbb, 0xdb,
-    0x5b, 0x43, 0xa4, 0x50, 0xbb, 0xb6, 0x0b, 0x25,
-    0x91, 0xae, 0x81, 0xd9, 0x5b, 0x89, 0x14, 0x30,
-    0xf6, 0x2d, 0x53, 0xca, 0x62, 0xe8, 0xbc, 0x7b,
-};
-#define EXPECTED_CRC32 0xD138F224u
-#define ROM_PAYLOAD_SIZE 2097152u
+#define ROM_PAYLOAD_SIZE YI_ROM_SIZE
+static YiRomProfile s_rom_profile = YI_ROM_UNSUPPORTED;
 
 #ifdef RECOMP_LAUNCHER
 static RecompLauncherCSettings g_settings;
@@ -345,49 +337,23 @@ static uint8_t* load_and_verify_rom(const char *path, size_t *out_size, char *er
     return NULL;
   }
 
-  uint8_t *file_buf = (uint8_t *)malloc(sz);
-  if (!file_buf || fread(file_buf, 1, sz, f) != (size_t)sz) {
-    if (file_buf) free(file_buf);
+  uint8_t *payload = malloc(ROM_PAYLOAD_SIZE);
+  if (!payload || fseek(f, (long)header_skip, SEEK_SET) != 0 ||
+      fread(payload, 1, ROM_PAYLOAD_SIZE, f) != ROM_PAYLOAD_SIZE) {
+    free(payload);
     fclose(f);
-    if (err_msg && err_cap) snprintf(err_msg, err_cap, "Failed to read %ld bytes from %s.", sz, path);
+    if (err_msg && err_cap) snprintf(err_msg, err_cap, "Failed to read ROM payload.");
     return NULL;
   }
   fclose(f);
 
-  uint8_t *payload = (uint8_t *)malloc(ROM_PAYLOAD_SIZE);
-  if (!payload) {
-    free(file_buf);
-    if (err_msg && err_cap) snprintf(err_msg, err_cap, "Out of memory allocating ROM payload buffer.");
-    return NULL;
-  }
-  memcpy(payload, file_buf + header_skip, ROM_PAYLOAD_SIZE);
-  free(file_buf);
-
-#ifdef RECOMP_LAUNCHER
-  /* Verify SHA-256 */
-  uint8_t actual_sha[32];
-  sha256_compute(payload, ROM_PAYLOAD_SIZE, actual_sha);
-  if (memcmp(actual_sha, kExpectedSha256, 32) != 0) {
-    char hex_got[65] = {0}, hex_exp[65] = {0};
-    for (int i = 0; i < 32; i++) {
-      snprintf(hex_got + i * 2, 3, "%02x", actual_sha[i]);
-      snprintf(hex_exp + i * 2, 3, "%02x", kExpectedSha256[i]);
-    }
+  s_rom_profile = YiIdentifyRom(payload, ROM_PAYLOAD_SIZE);
+  if (s_rom_profile == YI_ROM_UNSUPPORTED) {
     if (err_msg && err_cap)
-      snprintf(err_msg, err_cap, "ROM SHA-256 mismatch!\n  Got: %s\n  Exp: %s", hex_got, hex_exp);
+      snprintf(err_msg, err_cap, "Expected USA v1.0 or Europe (En,Fr,De) Rev 1.");
     free(payload);
     return NULL;
   }
-
-  /* Verify CRC-32 */
-  uint32_t actual_crc = crc32_compute(payload, ROM_PAYLOAD_SIZE);
-  if (actual_crc != EXPECTED_CRC32) {
-    if (err_msg && err_cap)
-      snprintf(err_msg, err_cap, "ROM CRC32 mismatch! Got 0x%08X, expected 0x%08X", actual_crc, EXPECTED_CRC32);
-    free(payload);
-    return NULL;
-  }
-#endif
 
   *out_size = ROM_PAYLOAD_SIZE;
   return payload;
@@ -677,11 +643,11 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   memset(&game, 0, sizeof(game));
   launcher_profile_apply("snes", &game);
   game.name = "Super Mario World 2: Yoshi's Island";
-  game.region = "USA";
-  game.known_sha256 = &kExpectedSha256;
-  game.num_known_sha256 = 1;
-  game.has_expected_crc = 1;
-  game.expected_crc = EXPECTED_CRC32;
+  game.region = "USA / Europe Rev 1";
+  game.known_sha256 = yi_known_sha256;
+  game.num_known_sha256 = 2;
+  game.has_expected_crc = 0;
+  game.expected_crc = 0;
   game.num_players = 1;
   game.widescreen_supported = 0;
 
@@ -840,7 +806,7 @@ int main(int argc, char **argv) {
   if (!rom_data) {
     char full_err[1024];
     snprintf(full_err, sizeof(full_err),
-             "ROM Error: %s\n\nPath: %s\n\nExpected: Super Mario World 2: Yoshi's Island (USA), Rev 1.0\nSHA-256: 9b4957466798bbdb5b43a450bbb60b2591ae81d95b891430f62d53ca62e8bc7b\nCRC32: D138F224",
+             "ROM Error: %s\n\nPath: %s\n\nExpected: USA v1.0 or Europe (En,Fr,De) Rev 1",
              err_msg[0] ? err_msg : "Verification failed", chosen_rom_path);
     fprintf(stderr, "%s\n", full_err);
     Die(full_err);
@@ -854,6 +820,7 @@ int main(int argc, char **argv) {
     Die("Failed to initialize SNES core!");
     return 2;
   }
+  GameConfigureRom(s_rom_profile);
   free(rom_data);
 
   if (!g_snes || !g_snes->cart || !g_snes->cart->superfx) {
@@ -972,10 +939,10 @@ int main(int argc, char **argv) {
   SDL_Event event;
 
   const uint64_t perf_freq = SDL_GetPerformanceFrequency();
-  const double target_frame_cycles = (double)perf_freq / 60.09881389744051;
+  const double target_frame_cycles = (double)perf_freq / YiRomFrameRate(s_rom_profile);
   uint64_t next_frame_time = SDL_GetPerformanceCounter();
 
-  printf("[Game] Entering authentic 60 FPS scanline execution loop...\n");
+  printf("[Game] Entering %.3f Hz scanline execution loop...\n", YiRomFrameRate(s_rom_profile));
 
   while (running) {
     while (SDL_PollEvent(&event)) {
@@ -1028,7 +995,7 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    /* Regulate 60.0988 Hz pacing */
+    /* Pace frames for the selected ROM region. */
     next_frame_time += (uint64_t)target_frame_cycles;
     uint64_t now_perf = SDL_GetPerformanceCounter();
     if (now_perf > next_frame_time + (uint64_t)(target_frame_cycles * 3)) {
