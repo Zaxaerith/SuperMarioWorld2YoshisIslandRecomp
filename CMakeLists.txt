@@ -65,7 +65,7 @@ endif()
 
 # Interactive Player Target (yoshis_island_recomp -> YoshisIslandRecomp.exe)
 if(YI_BUILD_PLAY)
-  add_executable(yoshis_island_recomp src/desktop.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  add_executable(yoshis_island_recomp src/desktop.c src/game_rtl.c src/rom_profile.c ${SNESRECOMP_RUNNER_SOURCES})
   # GUI subsystem: no console window behind the SDL game window.
   set_target_properties(yoshis_island_recomp PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -115,7 +115,7 @@ endif()
 
 # Headless Diagnostic Target (yi_headless)
 if(YI_BUILD_HEADLESS)
-  add_executable(yi_headless src/headless.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  add_executable(yi_headless src/headless.c src/game_rtl.c src/rom_profile.c ${SNESRECOMP_RUNNER_SOURCES})
   target_include_directories(yi_headless PRIVATE
     ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
     ${SNESRECOMP_ROOT}/runner/src/desktop
@@ -144,7 +144,7 @@ endif()
 
 # Launcher Contract Test Target (launcher_contract)
 if(YI_BUILD_TESTS)
-  add_executable(launcher_contract tests/launcher_contract.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  add_executable(launcher_contract tests/launcher_contract.c src/game_rtl.c src/rom_profile.c ${SNESRECOMP_RUNNER_SOURCES})
   target_include_directories(launcher_contract PRIVATE
     ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
     ${SNESRECOMP_ROOT}/runner/src/desktop
@@ -173,4 +173,33 @@ if(YI_BUILD_TESTS)
     add_custom_command(TARGET launcher_contract POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${YI_SDL_ROOT}/bin/SDL2.dll" "$<TARGET_FILE_DIR:launcher_contract>")
   endif()
+endif()
+
+# PAL regression tests
+
+if(YI_BUILD_TESTS)
+  add_executable(pal_contract tests/pal_contract.c src/game_rtl.c src/rom_profile.c ${SNESRECOMP_RUNNER_SOURCES})
+  target_include_directories(pal_contract PRIVATE
+    ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
+    ${SNESRECOMP_ROOT}/runner/src/desktop
+    ${CMAKE_CURRENT_SOURCE_DIR}/config
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  if(TARGET SDL2::SDL2)
+    target_link_libraries(pal_contract PRIVATE SDL2::SDL2)
+  else()
+    target_include_directories(pal_contract PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(pal_contract PRIVATE ${SDL2_LIBRARIES})
+  endif()
+  target_compile_definitions(pal_contract PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
+  if(NOT MSVC)
+    target_compile_options(pal_contract PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
+    target_link_options(pal_contract PRIVATE -Wl,--gc-sections -static-libgcc -static-libstdc++)
+  endif()
+  target_link_libraries(pal_contract PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
+  if(WIN32 AND DEFINED YI_SDL_ROOT AND EXISTS "${YI_SDL_ROOT}/bin/SDL2.dll")
+    add_custom_command(TARGET pal_contract POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${YI_SDL_ROOT}/bin/SDL2.dll" "$<TARGET_FILE_DIR:pal_contract>")
+  endif()
+  enable_testing()
+  add_test(NAME pal_contract COMMAND pal_contract)
 endif()
