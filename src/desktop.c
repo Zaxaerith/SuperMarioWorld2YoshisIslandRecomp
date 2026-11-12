@@ -350,7 +350,7 @@ static uint8_t* load_and_verify_rom(const char *path, size_t *out_size, char *er
   s_rom_profile = YiIdentifyRom(payload, ROM_PAYLOAD_SIZE);
   if (s_rom_profile == YI_ROM_UNSUPPORTED) {
     if (err_msg && err_cap)
-      snprintf(err_msg, err_cap, "Expected USA v1.0 or Europe (En,Fr,De) Rev 1.");
+      snprintf(err_msg, err_cap, "Expected USA or Europe (En,Fr,De), Rev 0, 1 or 2.");
     free(payload);
     return NULL;
   }
@@ -643,9 +643,9 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   memset(&game, 0, sizeof(game));
   launcher_profile_apply("snes", &game);
   game.name = "Super Mario World 2: Yoshi's Island";
-  game.region = "USA / Europe Rev 1";
+  game.region = "USA / Europe (Rev 0-2)";
   game.known_sha256 = yi_known_sha256;
-  game.num_known_sha256 = 2;
+  game.num_known_sha256 = YI_ROM_COUNT;
   game.has_expected_crc = 0;
   game.expected_crc = 0;
   game.num_players = 1;
@@ -806,7 +806,7 @@ int main(int argc, char **argv) {
   if (!rom_data) {
     char full_err[1024];
     snprintf(full_err, sizeof(full_err),
-             "ROM Error: %s\n\nPath: %s\n\nExpected: USA v1.0 or Europe (En,Fr,De) Rev 1",
+             "ROM Error: %s\n\nPath: %s\n\nExpected: USA or Europe (En,Fr,De), Rev 0, 1 or 2",
              err_msg[0] ? err_msg : "Verification failed", chosen_rom_path);
     fprintf(stderr, "%s\n", full_err);
     Die(full_err);

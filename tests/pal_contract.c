@@ -76,7 +76,7 @@ static int test_pal_timing(void) {
 /* The fixture calls a PC for which the US build has an AOT body. The fixture's
  * bytes intentionally differ: PAL must execute them even in an interrupt and
  * even when scheduler acceleration was explicitly requested. */
-static int test_revision_execution_floor(void) {
+static int test_revision_execution_floor(YiRomProfile profile) {
     uint8_t *rom = calloc(1, YI_ROM_SIZE);
     TEST_ASSERT(rom != NULL, "allocate synthetic ROM");
     memcpy(rom + 0x7fc0, "PAL CONTRACT FIXTURE  ", 21);
@@ -92,7 +92,7 @@ static int test_revision_execution_floor(void) {
     RtlRegisterGame(&kGameInfo);
     TEST_ASSERT(SnesInit(rom, YI_ROM_SIZE) != NULL, "initialize synthetic cartridge");
     free(rom);
-    GameConfigureRom(YI_ROM_EU_11);
+    GameConfigureRom(profile);
     interp_bridge_set_scheduler_aot_policy(1);
     g_snes->nmiEnabled = true;
     TEST_ASSERT(interp_bridge_run_until_quiescent(&g_cpu, 0x008000), "synthetic mainline reaches WAI");
@@ -180,12 +180,14 @@ static int test_frame_cadence(YiRomProfile profile) {
 }
 
 int main(int argc, char **argv) {
-    if (!test_invalid_identity() || !test_pal_timing() || !test_revision_execution_floor())
-        return 1;
-    if (!test_frame_cadence(YI_ROM_US_10) || !test_frame_cadence(YI_ROM_EU_11))
-        return 1;
-    if (argc > 1 && !test_rom_identity(argv[1], YI_ROM_US_10)) return 1;
-    if (argc > 2 && !test_rom_identity(argv[2], YI_ROM_EU_11)) return 1;
-    printf("PAL regression tests: %u assertions passed\n", assertions);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    RtlRegisterGame(&kGameInfo);
+    if (!test_invalid_identity() || !test_pal_timing()) return 1;
+    for (YiRomProfile profile = YI_ROM_US_10; profile < YI_ROM_COUNT; ++profile) {
+        if (!test_frame_cadence(profile)) return 1;
+        if (YiRomIsPal(profile) && !test_revision_execution_floor(profile)) return 1;
+        if (argc > profile + 1 && !test_rom_identity(argv[profile + 1], profile)) return 1;
+    }
+    printf("Multi-region regression tests: %u assertions passed\n", assertions);
     return 0;
 }
