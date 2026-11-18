@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "yi_video_effects.h"
 #include <string.h>
 
 #define SDL_MAIN_HANDLED
@@ -62,6 +63,34 @@ static YiRomProfile s_rom_profile = YI_ROM_UNSUPPORTED;
 #ifdef RECOMP_LAUNCHER
 static RecompLauncherCSettings g_settings;
 static char g_config_path[1024] = "config.ini";
+static unsigned g_video_effect;
+static SDL_Keycode g_effect_hotkey = SDLK_F7;
+int YiEffectsLauncherMode(void) { return (int)g_video_effect; }
+void YiEffectsLauncherSetMode(int mode) {
+  if (mode < 0 || mode >= YI_EFFECT_COUNT) return;
+  g_video_effect = (unsigned)mode;
+  char value[16]; snprintf(value, sizeof(value), "%u", g_video_effect);
+  launcher_ini_kv_write(g_config_path, "Mods", "VideoEffect", value);
+}
+const char *YiEffectsLauncherHotkey(void) { return SDL_GetKeyName(g_effect_hotkey); }
+int YiEffectsLauncherSetHotkey(const char *name) {
+  SDL_Keycode key = SDL_GetKeyFromName(name);
+  if (!key || key == SDLK_ESCAPE || key == SDLK_RETURN || key == SDLK_F6 ||
+      key == SDLK_F8 || key == SDLK_F9 || key == SDLK_F10 || key == SDLK_F11 ||
+      key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT || key == SDLK_RALT ||
+      key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LGUI || key == SDLK_RGUI)
+    return 0;
+  SDL_Scancode scan = SDL_GetScancodeFromKey(key);
+  for (int button = 0; button < 12; ++button)
+    if (keybinds_get_button(1, button) == scan) return 0;
+  if (key > 0 && key < 128 && strchr("wasdjklizxcqe", (int)key)) return 0;
+  if (key == SDLK_SPACE || key == SDLK_TAB || key == SDLK_RSHIFT) return 0;
+  g_effect_hotkey = key;
+  char value[24]; snprintf(value, sizeof(value), "%d", (int)key);
+  launcher_ini_kv_write(g_config_path, "Mods", "EffectsKeycode", value);
+  return 1;
+}
+
 static char g_keybinds_path[1024] = "keybinds.ini";
 static char g_active_sram_path[1024] = "saves/save.srm";
 #endif
@@ -594,6 +623,15 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   snesrecomp_exe_dir_path("keybinds.ini", g_keybinds_path, sizeof(g_keybinds_path));
 
   load_launcher_settings(settings, g_config_path);
+  int effect_value = 0;
+  if (ini_read_int(g_config_path,"Mods","VideoEffect",&effect_value) &&
+      effect_value >= 0 && effect_value < YI_EFFECT_COUNT) g_video_effect = (unsigned)effect_value;
+  /* Stored as SDL keycodes; validate using the same path as the launcher. */
+  int hotkey_value = 0;
+  if (ini_read_int(g_config_path,"Mods","EffectsKeycode",&hotkey_value))
+    YiEffectsLauncherSetHotkey(SDL_GetKeyName((SDL_Keycode)hotkey_value));
+
+
 
   bool force_launcher = false;
   const char *explicit_rom = (cli_rom_override && cli_rom_override[0]) ? cli_rom_override : NULL;
@@ -737,7 +775,35 @@ static void print_usage(const char *prog_name) {
   printf("  CRC32:   D138F224\n");
 }
 
+#ifdef RECOMP_LAUNCHER
+static int effects_hotkey_selftest(void) {
+  const char *path = "effects-selftest.ini";
+  FILE *existing = fopen(path,"rb");
+  if (existing) { fclose(existing); return 2; }
+  if (SDL_Init(SDL_INIT_EVENTS) != 0) return 3;
+  snprintf(g_config_path,sizeof(g_config_path),"%s",path);
+  int ok = YiEffectsLauncherSetHotkey("F2") && g_effect_hotkey == SDLK_F2 &&
+           !YiEffectsLauncherSetHotkey("F8") && g_effect_hotkey == SDLK_F2;
+  g_video_effect = 0;
+  const unsigned effect_cycle[]={4,1,2,3,0};
+  for (unsigned i=1;i<=YI_EFFECT_COUNT;++i) {
+    ok &= YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,false,false);
+    ok &= g_video_effect == effect_cycle[i-1];
+  }
+  ok &= YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,true,false) && g_video_effect==0;
+  ok &= !YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,false,true) && g_video_effect==0;
+  int saved=0;
+  ok &= ini_read_int(path,"Mods","EffectsKeycode",&saved) && saved == SDLK_F2;
+  remove(path);
+  SDL_Quit();
+  printf("Effects hotkey rebind, persistence, repeat and cycle: %s\n",ok?"PASS":"FAIL");
+  return ok?0:1;
+}
+#endif
 int main(int argc, char **argv) {
+#ifdef RECOMP_LAUNCHER
+  if(argc==2 && !strcmp(argv[1],"--effects-selftest")) return effects_hotkey_selftest();
+#endif
 #ifdef _WIN32
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD ft = (hOut && hOut != INVALID_HANDLE_VALUE) ? GetFileType(hOut) : FILE_TYPE_UNKNOWN;
@@ -900,6 +966,9 @@ int main(int argc, char **argv) {
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
   }
 
+  SDL_Texture *effect_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32,
+      SDL_TEXTUREACCESS_STREAMING, 256 * 3, 224 * 3);
+  static uint8_t effect_pixels[256 * 224 * 36];
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
@@ -949,6 +1018,13 @@ int main(int argc, char **argv) {
       if (event.type == SDL_QUIT) {
         running = false;
       } else if (event.type == SDL_KEYDOWN) {
+#ifdef RECOMP_LAUNCHER
+        if (YiEffectKeyDown(&g_video_effect,g_effect_hotkey,event.key.keysym.sym,
+            event.key.repeat != 0,(event.key.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) != 0)) {
+          if(!event.key.repeat) YiEffectsLauncherSetMode((int)g_video_effect);
+          continue;
+        }
+#endif
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
         } else if (event.key.keysym.sym == SDLK_F11 ||
@@ -983,7 +1059,11 @@ int main(int argc, char **argv) {
     /* Present active viewport */
     SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    if(effect_texture && g_video_effect && YiEffectApply(g_video_effect,fb_pixels,
+        256,224,256*4,effect_pixels,sizeof(effect_pixels))) {
+      SDL_UpdateTexture(effect_texture,NULL,effect_pixels,256*12);
+      SDL_RenderCopy(renderer,effect_texture,NULL,NULL);
+    } else SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
 
     static uint32_t s_frame_save_counter = 0;
@@ -1041,6 +1121,7 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
+  if (effect_texture) SDL_DestroyTexture(effect_texture);
   if (texture) SDL_DestroyTexture(texture);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
