@@ -36,6 +36,11 @@ struct Snes {
   uint32_t ramAdr;
   uint8_t *ram;
 
+  /* Optional host scanout at H=1024 for lines 0..224, before beam HDMA.
+   * NULL preserves hosts that render separately. Not serialized; callbacks
+   * must not advance the beam or modify its position. */
+  void (*scanlineHook)(Snes *snes, unsigned line, void *context);
+  void *scanlineHookContext;
   // Host timing anchor; excluded from savestates and reconciled after load.
   uint64_t beamMasterLast;
 
