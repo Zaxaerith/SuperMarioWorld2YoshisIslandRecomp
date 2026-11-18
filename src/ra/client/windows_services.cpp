@@ -6,6 +6,10 @@
 #include <cwctype>
 #include <mutex>
 #include <windows.h>
+#include <wincrypt.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "crypt32.lib")
+#endif
 #include <wincred.h>
 #include <winhttp.h>
 
@@ -39,6 +43,46 @@ struct Internet {
   ~Internet() { cancel(); }
   operator HINTERNET() const { return h.load(); }
 };
+
+// Stable, per-user fallback when Windows Credential Manager rejects writes.
+std::wstring session_file(const std::wstring& target) {
+    wchar_t root[32768]; DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",root,32768);
+    if(!n || n>=32768)return {};
+    std::wstring dir=std::wstring(root)+L"\\YoshisIslandRecomp";
+    if(!CreateDirectoryW(dir.c_str(),nullptr) && GetLastError()!=ERROR_ALREADY_EXISTS)return {};
+    unsigned long long hash=14695981039346656037ull;
+    for(auto ch:target){hash^=(unsigned short)ch;hash*=1099511628211ull;}
+    return dir+L"\\ra-session-"+std::to_wstring(hash)+L".dat";
+}
+bool protected_session(const std::wstring& target,Credential& value,bool write) {
+    auto path=session_file(target);if(path.empty())return false;
+    DATA_BLOB input{},output{};std::string bytes;
+    if(write){
+        if(value.username.empty()||value.token.empty()||value.username.find('\n')!=std::string::npos)return false;
+        bytes=value.username+"\n"+value.token;
+        input.pbData=(BYTE*)bytes.data();input.cbData=(DWORD)bytes.size();
+        if(!CryptProtectData(&input,L"RetroAchievements session",nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&output))return false;
+        auto temp=path+L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";
+        HANDLE file=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        DWORD count=0;bool ok=file!=INVALID_HANDLE_VALUE;
+        if(ok){ok=WriteFile(file,output.pbData,output.cbData,&count,nullptr)&&count==output.cbData;ok=FlushFileBuffers(file)&&ok;CloseHandle(file);}
+        if(ok)ok=MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
+        if(!ok)DeleteFileW(temp.c_str());
+        SecureZeroMemory(bytes.data(),bytes.size());LocalFree(output.pbData);return ok;
+    }
+    HANDLE file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(file==INVALID_HANDLE_VALUE)return false;
+    DWORD size=GetFileSize(file,nullptr),count=0;
+    if(!size||size>65536){CloseHandle(file);return false;}
+    bytes.resize(size);bool ok=ReadFile(file,bytes.data(),size,&count,nullptr)&&count==size;CloseHandle(file);
+    input.pbData=(BYTE*)bytes.data();input.cbData=size;
+    if(!ok||!CryptUnprotectData(&input,nullptr,nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&output))return false;
+    std::string plain((char*)output.pbData,output.cbData);SecureZeroMemory(output.pbData,output.cbData);LocalFree(output.pbData);
+    auto split=plain.find('\n');ok=split!=std::string::npos&&split>0&&split+1<plain.size();
+    if(ok){value.username=plain.substr(0,split);value.token=plain.substr(split+1);}
+    SecureZeroMemory(plain.data(),plain.size());return ok;
+}
+
 struct Windows final : Services {
   std::wstring target;
   std::mutex mutex;
@@ -139,7 +183,7 @@ struct Windows final : Services {
   bool restore(Credential &out) override {
     PCREDENTIALW credential = nullptr;
     if (!CredReadW(target.c_str(), CRED_TYPE_GENERIC, 0, &credential))
-      return false;
+      return protected_session(target,out,false);
     if (credential->UserName && credential->CredentialBlobSize &&
         credential->CredentialBlobSize <= CRED_MAX_CREDENTIAL_BLOB_SIZE) {
       out.username = utf8(credential->UserName);
@@ -161,9 +205,10 @@ struct Windows final : Services {
     credential.CredentialBlobSize = (DWORD)value.token.size();
     credential.CredentialBlob = (LPBYTE)value.token.data();
     credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
-    return CredWriteW(&credential, 0) != 0;
+    if(CredWriteW(&credential,0)){DeleteFileW(session_file(target).c_str());return true;}
+    auto copy=value;bool ok=protected_session(target,copy,true);SecureZeroMemory(copy.token.data(),copy.token.size());return ok;
   }
-  void forget() override { CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0); }
+  void forget() override { CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0);DeleteFileW(session_file(target).c_str()); }
   void cancel() override {
     cancelled = true;
     std::lock_guard<std::mutex> lock(mutex);
