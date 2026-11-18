@@ -39,6 +39,15 @@ else()
   target_compile_options(snesrecomp_game PRIVATE /w)
 endif()
 
+# Platform-specific linker flags (Apple ld does not accept GNU linker options).
+function(yi_set_link_options target)
+  if(APPLE)
+    target_link_options(${target} PRIVATE -Wl,-dead_strip)
+  elseif(NOT MSVC)
+    target_link_options(${target} PRIVATE -Wl,--gc-sections -static-libgcc -static-libstdc++)
+  endif()
+endfunction()
+
 # Locate SDL2 for windowing, controller input and audio playback
 if(YI_BUILD_PLAY OR YI_BUILD_HEADLESS OR YI_BUILD_TESTS)
   if(NOT DEFINED YI_SDL_ROOT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/SDL2")
@@ -63,7 +72,7 @@ if(YI_BUILD_PLAY OR YI_BUILD_HEADLESS OR YI_BUILD_TESTS)
   endif()
 endif()
 
-# Interactive Player Target (yoshis_island_recomp -> YoshisIslandRecomp.exe)
+# Interactive Player Target
 if(YI_BUILD_PLAY)
   add_executable(yoshis_island_recomp src/desktop.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
   # GUI subsystem: no console window behind the SDL game window.
@@ -86,8 +95,8 @@ if(YI_BUILD_PLAY)
   target_compile_definitions(yoshis_island_recomp PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
   if(NOT MSVC)
     target_compile_options(yoshis_island_recomp PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
-    target_link_options(yoshis_island_recomp PRIVATE -Wl,--gc-sections -static-libgcc -static-libstdc++)
   endif()
+  yi_set_link_options(yoshis_island_recomp)
   target_link_libraries(yoshis_island_recomp PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
 
   # recomp-ui native GUI launcher integration
@@ -132,8 +141,8 @@ if(YI_BUILD_HEADLESS)
   target_compile_definitions(yi_headless PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
   if(NOT MSVC)
     target_compile_options(yi_headless PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
-    target_link_options(yi_headless PRIVATE -Wl,--gc-sections -static-libgcc -static-libstdc++)
   endif()
+  yi_set_link_options(yi_headless)
   target_link_libraries(yi_headless PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
 
   if(WIN32 AND DEFINED YI_SDL_ROOT AND EXISTS "${YI_SDL_ROOT}/bin/SDL2.dll")
@@ -163,8 +172,8 @@ if(YI_BUILD_TESTS)
   target_compile_definitions(launcher_contract PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
   if(NOT MSVC)
     target_compile_options(launcher_contract PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
-    target_link_options(launcher_contract PRIVATE -Wl,--gc-sections -static-libgcc -static-libstdc++)
   endif()
+  yi_set_link_options(launcher_contract)
   target_link_libraries(launcher_contract PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
 
   recomp_target_launcher_ui(launcher_contract CONSOLE snes)
