@@ -36,7 +36,6 @@ extern int cosim_apu_shared_clock(void);  /* common_rtl.c — SNES_COSIM_APU_SHA
 #endif
 void RtlApuLock(void);                    /* real mutex in the windowed runner (audio thread also cycles the SPC); no-op in headless/cosim */
 void RtlApuUnlock(void);
-static const double kInterpApuPerMaster = (32040.0 * 32.0) / (1364.0 * 262.0 * 60.0);
 
 /* Batched guest-time APU advance. v1 advanced the SPC per interpreted opcode:
  * RtlApuLock + snes_catchupApu once per opcode. In the windowed build that
@@ -78,7 +77,7 @@ static void bridge_apu_flush(CpuState *cpu) {
       apu_prof_calls++; }
     clock_t _t0 = clock();
 #endif
-    if (interp_bridge_use_absolute_apu_timeline(
+    if ((g_snes && g_snes->pal) || interp_bridge_use_absolute_apu_timeline(
             rtl_apu_frame_timeline_active(),
             g_snes && cart_has_sa1(g_snes->cart),
             rtl_apu_extended_frame_timing() &&
@@ -98,7 +97,7 @@ static void bridge_apu_flush(CpuState *cpu) {
         return;
     }
     RtlApuLock();
-    g_snes->apuCatchupCycles += (double)s_apu_pending_master * kInterpApuPerMaster;
+    g_snes->apuCatchupCycles += (double)s_apu_pending_master * snes_apu_per_master(g_snes);
     g_apu_last_sync_master = cpu->master_cycles;
     snes_catchupApu(g_snes);
     /* After the relative catch-up, resync the SPC to the absolute guest clock.
@@ -777,6 +776,8 @@ void interp_bridge_set_lle_bounce_exclusions(const uint32 *targets,
 #ifndef SNESRECOMP_LLE_BOUNCE_DEFAULT
 #define SNESRECOMP_LLE_BOUNCE_DEFAULT 0
 #endif
+static bool s_aot_enabled = true;
+void interp_bridge_set_aot_enabled(bool enabled) { s_aot_enabled = enabled; }
 static int s_scheduler_aot_policy = -1;
 void interp_bridge_set_scheduler_aot_policy(int enabled) {
     s_scheduler_aot_policy = enabled < 0 ? -1 : enabled != 0;
@@ -1404,12 +1405,12 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                              * advance AGAIN (double count). Flushing
                              * pre-jump anchors to pre-skip guest time
                              * (no-op re-anchor), catchup adds exactly
-                             * skip * kInterpApuPerMaster. */
+                             * skip * snes_apu_per_master(g_snes). */
                             s_apu_pending_master += skip;
                             for (int _g = 0; s_apu_pending_master && _g < 64;
                                  _g++) {
                                 const uint64_t _max_feed =
-                                    (uint64_t)(9000.0 / kInterpApuPerMaster);
+                                    (uint64_t)(9000.0 / snes_apu_per_master(g_snes));
                                 uint64_t _chunk = s_apu_pending_master;
                                 if (_chunk > _max_feed) _chunk = _max_feed;
                                 uint64_t _rest = s_apu_pending_master - _chunk;
@@ -2099,7 +2100,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
              * coroutine switch. SNESRECOMP_LLE_BOUNCE=0 restores the
              * interpret-everything behavior (A/B differential lever). */
             const int bounce_ok =
-                (!yield_pc || lle_yield_bounce_enabled()) &&
+                s_aot_enabled && (!yield_pc || lle_yield_bounce_enabled()) &&
                 !lle_bounce_target_excluded(target);
             const int has_body  = cpu_dispatch_has_entry(cpu, target);
             if (bounce_ok && has_body) {

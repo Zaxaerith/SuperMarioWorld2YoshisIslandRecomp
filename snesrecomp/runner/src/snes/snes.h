@@ -42,6 +42,7 @@ struct Snes {
   void (*scanlineHook)(Snes *snes, unsigned line, void *context);
   void *scanlineHookContext;
   // Host timing anchor; excluded from savestates and reconciled after load.
+  bool pal; /* Host-selected region; not part of savestate blobs. */
   uint64_t beamMasterLast;
 
   // --- saveload blob starts here (hPos .. divideResult) ---
@@ -111,6 +112,13 @@ struct Snes {
   uint16_t divideResult;
 };
 
+static inline unsigned snes_frame_lines(const Snes *snes) {
+  return snes && snes->pal ? 312u : 262u;
+}
+static inline double snes_apu_per_master(const Snes *snes) {
+  return (32040.0 * 32.0) / (snes && snes->pal ? 21281370.0 : (1364.0 * 262.0 * 60.0));
+}
+void snes_set_pal(Snes *snes, bool pal);
 Snes* snes_init(uint8_t *ram);
 void snes_free(Snes* snes);
 void snes_reset(Snes* snes, bool hard);

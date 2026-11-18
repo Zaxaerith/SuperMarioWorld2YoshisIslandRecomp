@@ -35,6 +35,8 @@
 /* Launch-time main-scheduler AOT policy: -1 default/environment, 0 floor,
  * 1 accelerated. Native interrupt helpers retain their ordinary policy. */
 void interp_bridge_set_scheduler_aot_policy(int enabled);
+/* Compatibility floor: also disables AOT in interrupts and nested calls. */
+void interp_bridge_set_aot_enabled(bool enabled);
 
 /* Once port time is mapped, the frame timeline and interpreter catch-up
  * describe the same elapsed time. Extended-frame hosts use absolute sync;
