@@ -604,6 +604,12 @@ void PpuSetWidescreenLineEnhancer(Ppu *ppu,
                                   PpuWidescreenLineEnhancer *enhancer,
                                   void *context);
 
+/* Host-owned detached copy only. Evaluates OBJ and the existing legacy
+ * compositor in the side margins only, without advancing the beam, guest
+ * state, or native PPU. Caller copies the native center separately. */
+void PpuRenderDetachedLegacyLine(Ppu *detached, unsigned line);
+/* Full private row, for additional vertical picture bands only. */
+
 // Renderer-neutral host-overlay extraction (opt-in; see
 // docs/HOST_OVERLAY_EXTRACTION.md). Default behavior is unchanged: with no
 // surface bound and no capture rectangle set, every source is a deterministic
@@ -901,5 +907,7 @@ bool PpuSetWidescreenLayerElasticSplitBandSlot(
     Ppu *ppu, uint8_t slot, uint8_t layer, uint8_t y0, uint8_t y1,
     uint16_t left_elastic_x0, uint16_t left_elastic_x1,
     uint16_t right_elastic_x0, uint16_t right_elastic_x1);
+
+void PpuLegacyBgCoordinates(const Ppu *ppu, int layer, int x, int line, int *lx, int *ly);
 
 #endif

@@ -2646,6 +2646,14 @@ static bool PpuWidescreenOamLeftHintAllows(Ppu *ppu, uint8_t index, int x,
   return ppu->wsOamMotionGrace[slot] != 0;
 }
 
+void PpuRenderDetachedLegacyLine(Ppu *ppu, unsigned line) {
+  if (!line || line > 224 || !ppu->renderBuffer) return;
+  ClearBackdrop(ppu, &ppu->objBuffer);
+  ppu->lineHasSprites = !PPU_forcedBlank(ppu) && ppu_evaluateSprites(ppu, line - 1);
+  ppu_draw_side_margins_legacy(ppu, (int)line);
+}
+
+
 static bool ppu_evaluateSprites(Ppu* ppu, int line) {
   static const uint8 spriteSizes[8][2] = {
     {8, 16}, {8, 32}, {8, 64}, {16, 32},

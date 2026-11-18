@@ -13,6 +13,7 @@
 #include <SDL.h>
 
 #include "game_rtl.h"
+#include "yi_ws11.h"
 #include "common_rtl.h"
 #include "cpu_state.h"
 #include "snes/snes.h"
@@ -62,6 +63,12 @@ static YiRomProfile s_rom_profile = YI_ROM_UNSUPPORTED;
 #ifdef RECOMP_LAUNCHER
 static RecompLauncherCSettings g_settings;
 static char g_config_path[1024] = "config.ini";
+static bool g_widescreen;
+int YiWsLauncherEnabled(void) { return g_widescreen; }
+void YiWsLauncherSetEnabled(int enabled) {
+  g_widescreen = enabled != 0;
+  launcher_ini_kv_write(g_config_path, "Mods", "Widescreen", g_widescreen ? "1" : "0");
+}
 static char g_keybinds_path[1024] = "keybinds.ini";
 static char g_active_sram_path[1024] = "saves/save.srm";
 #endif
@@ -594,6 +601,8 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   snesrecomp_exe_dir_path("keybinds.ini", g_keybinds_path, sizeof(g_keybinds_path));
 
   load_launcher_settings(settings, g_config_path);
+  int ws_value = 0;
+  if (ini_read_int(g_config_path, "Mods", "Widescreen", &ws_value)) g_widescreen = ws_value != 0;
 
   bool force_launcher = false;
   const char *explicit_rom = (cli_rom_override && cli_rom_override[0]) ? cli_rom_override : NULL;
@@ -737,6 +746,11 @@ static void print_usage(const char *prog_name) {
   printf("  CRC32:   D138F224\n");
 }
 
+static void capture_ws_pixels(const char *path, const void *pixels, int width, int height, int pitch) {
+  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom((void *)pixels, width, height, 32, pitch, SDL_PIXELFORMAT_BGRA32);
+  if (surface) { SDL_SaveBMP(surface, path); SDL_FreeSurface(surface); }
+}
+
 int main(int argc, char **argv) {
 #ifdef _WIN32
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -821,6 +835,8 @@ int main(int argc, char **argv) {
     return 2;
   }
   GameConfigureRom(s_rom_profile);
+  YiWs11Init(s_rom_profile);
+  YiWs11SetEnabled(g_widescreen);
   free(rom_data);
 
   if (!g_snes || !g_snes->cart || !g_snes->cart->superfx) {
@@ -862,6 +878,7 @@ int main(int argc, char **argv) {
 
   int win_w = (aspect == 0) ? ((256 * scale * 7 + 3) / 6) : (pres_w * scale);
   int win_h = pres_h * scale;
+  if (g_widescreen) win_w = (win_h * 16 + 8) / 9;
 
   Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
   if (fullscreen) {
@@ -900,6 +917,10 @@ int main(int argc, char **argv) {
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
   }
 
+  SDL_Texture *wide_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32,
+      SDL_TEXTUREACCESS_STREAMING, YI_WS_WIDTH, YI_WS_HEIGHT);
+  if (!wide_texture) Die("Widescreen texture allocation failed");
+  SDL_SetTextureBlendMode(wide_texture, SDL_BLENDMODE_NONE);
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
@@ -935,6 +956,7 @@ int main(int argc, char **argv) {
 
   refresh_controller_bindings();
 
+  bool capture_requested = false;
   bool running = true;
   SDL_Event event;
 
@@ -951,6 +973,10 @@ int main(int argc, char **argv) {
       } else if (event.type == SDL_KEYDOWN) {
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
+        } else if (event.key.keysym.sym == SDLK_F9 && !event.key.repeat) {
+          capture_requested = true;
+        } else if (event.key.keysym.sym == SDLK_F8 && !event.key.repeat) {
+          YiWs11Toggle();
         } else if (event.key.keysym.sym == SDLK_F11 ||
                    (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))) {
           static bool s_fs = false;
@@ -981,9 +1007,26 @@ int main(int argc, char **argv) {
     GameDrawPpuFrame();
 
     /* Present active viewport */
-    SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
+    bool wide = YiWs11PresentationWide();
+    SDL_Texture *present = wide ? wide_texture : texture;
+    SDL_UpdateTexture(present,NULL,wide ? YiWs11Pixels() : fb_pixels,
+                      (wide ? YI_WS_WIDTH : 256)*4);
+    SDL_RenderSetLogicalSize(renderer,wide ? 2400 : pres_w,wide ? 1350 : pres_h);
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_Rect picture={3,3,2394,1344};
+    SDL_RenderCopy(renderer,present,NULL,wide ? &picture : NULL);
+    if (capture_requested) {
+      char native_path[128],wide_path[128],terrain_path[128];
+      unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
+      snprintf(native_path,sizeof(native_path),"ws-%llu-native.bmp",capture_id);
+      snprintf(wide_path,sizeof(wide_path),"ws-%llu-wide.bmp",capture_id);
+      snprintf(terrain_path,sizeof(terrain_path),"ws-%llu-terrain.bin",capture_id);
+      YiWs11CaptureTerrain(terrain_path);
+      capture_ws_pixels(native_path, fb_pixels, 256, 224, 256 * 4);
+      capture_ws_pixels(wide_path, YiWs11Pixels(), YI_WS_WIDTH, 224, YI_WS_WIDTH * 4);
+      printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
+      capture_requested = false;
+    }
     SDL_RenderPresent(renderer);
 
     static uint32_t s_frame_save_counter = 0;
@@ -1041,6 +1084,7 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
+  SDL_DestroyTexture(wide_texture);
   if (texture) SDL_DestroyTexture(texture);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
