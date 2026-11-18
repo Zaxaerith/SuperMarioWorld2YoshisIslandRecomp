@@ -84,6 +84,7 @@ void ppu_free(Ppu* ppu) {
 
 void ppu_reset(Ppu* ppu) {
   {
+    bool pal = ppu->pal;
     size_t pitch = ppu->renderPitch;
     uint8_t *renderBuffer = ppu->renderBuffer;
     uint32_t renderFlags = ppu->renderFlags;
@@ -93,6 +94,7 @@ void ppu_reset(Ppu* ppu) {
     memcpy(overlayPitch, ppu->overlayRenderPitch, sizeof(overlayPitch));
     memcpy(overlayBuffer, ppu->overlayRenderBuffer, sizeof(overlayBuffer));
     memset(ppu, 0, sizeof(*ppu));
+    ppu->pal = pal;
     ppu->renderBuffer = renderBuffer;
     ppu->renderPitch = (uint32_t)pitch;
     ppu->renderFlags = renderFlags;
@@ -2867,7 +2869,7 @@ uint8_t ppu_read(Ppu* ppu, uint8_t adr) {
       return val;
     }
     case 0x3f: {
-      uint8_t val = 0x3; // ppu2 version (4 bit), bit 4: ntsc/pal
+      uint8_t val = 0x3 | (ppu->pal ? 0x10 : 0); // PPU2 version and PAL region
       val |= ppu->countersLatched << 6;
       val |= ppu->evenFrame << 7;
       ppu->countersLatched = false; // TODO: only when ppulatch is set

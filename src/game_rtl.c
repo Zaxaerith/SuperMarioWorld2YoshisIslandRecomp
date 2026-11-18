@@ -12,7 +12,7 @@
 #include <stdlib.h>
 
 #define MASTER_CYCLES_PER_LINE 1364ull
-#define SCANLINES_PER_FRAME 262u
+#define SCANLINES_PER_FRAME snes_frame_lines(g_snes)
 #define MASTER_CYCLES_PER_FRAME (SCANLINES_PER_FRAME * MASTER_CYCLES_PER_LINE)
 
 static uint32_t resume_pc;
@@ -160,6 +160,12 @@ void GameSessionReset(void) {
     g_snes->hPos = 0;
     g_snes->vPos = 0;
   }
+}
+
+void GameConfigureRom(YiRomProfile profile) {
+  snes_set_pal(g_snes, YiRomIsPal(profile));
+  interp_bridge_set_aot_enabled(profile == YI_ROM_US_10);
+  GameSessionReset();
 }
 
 uint32_t GameGetResumePc(void) {

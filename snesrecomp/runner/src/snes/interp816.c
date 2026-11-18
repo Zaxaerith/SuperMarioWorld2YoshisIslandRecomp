@@ -1344,9 +1344,9 @@ static void interp816_doOpcode(Interp816* cpu, uint8_t opcode) {
     }
     case 0x40: { // rti imp
       interp816_setFlags(cpu, interp816_pullByte(cpu));
-      cpu->cyclesUsed++; // native mode: 1 extra cycle
+      if (!cpu->e) cpu->cyclesUsed++; // native mode has a bank byte
       cpu->pc = interp816_pullWord(cpu);
-      cpu->k = interp816_pullByte(cpu);
+      if (!cpu->e) cpu->k = interp816_pullByte(cpu);
       break;
     }
     case 0x41: { // eor idx
