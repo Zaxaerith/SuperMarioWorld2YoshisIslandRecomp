@@ -100,6 +100,8 @@ void dsp_reset(Dsp* dsp) {
     dsp->channel[i].gainValue = 0;
     dsp->channel[i].gain = 0;
     dsp->channel[i].keyOn = false;
+    dsp->channel[i].keyOnDelay = 0;
+    dsp->channel[i].keyOnReady = false;
     dsp->channel[i].keyOff = false;
     dsp->channel[i].sampleOut = 0;
     dsp->channel[i].volumeL = 0;
@@ -282,6 +284,27 @@ static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR) {
 }
 
 static void dsp_cycleChannel(Dsp* dsp, int ch) {
+  /* Key-on has a five-sample initialization interval. Keep the envelope and
+   * output silent without advancing the playback phase. Still allow a new
+   * key-on to restart initialization and honor reset/key-off while waiting. */
+  DspChannel *voice = &dsp->channel[ch];
+  bool restart = dsp->evenCycle && voice->keyOn && !voice->keyOff;
+  if (voice->keyOnDelay && !restart) {
+    if (--voice->keyOnDelay == 0)
+      voice->keyOnReady = true;
+    if (dsp->reset) {
+      voice->keyOnDelay = 0;
+      voice->keyOnReady = false;
+      voice->adsrState = 4;
+    } else if (dsp->evenCycle && voice->keyOff) {
+      voice->adsrState = 4;
+    }
+    voice->gain = 0;
+    voice->sampleOut = 0;
+    dsp->ram[ch * 16 + 8] = dsp->ram[ch * 16 + 9] = 0;
+    return;
+  }
+
   // handle pitch counter
   uint16_t pitch = dsp->channel[ch].pitch;
   if(ch > 0 && dsp->channel[ch].pitchModulation) {
@@ -289,7 +312,9 @@ static void dsp_cycleChannel(Dsp* dsp, int ch) {
     pitch = (pitch * factor) >> 10;
     if(pitch > 0x3fff) pitch = 0x3fff;
   }
-  int newCounter = dsp->channel[ch].pitchCounter + pitch;
+  bool first_output = voice->keyOnReady;
+  voice->keyOnReady = false;
+  int newCounter = dsp->channel[ch].pitchCounter + (first_output ? 0 : pitch);
   if(newCounter > 0xffff) {
     // next sample
     dsp_decodeBrr(dsp, ch);
@@ -328,6 +353,16 @@ static void dsp_cycleChannel(Dsp* dsp, int ch) {
       // follows ADSR or the GAIN program is decided live per tick (the
       // stage machine is source-independent — see dsp_handleGain).
       dsp->channel[ch].adsrState = 0;
+      /* Prime the new block, not the previous note's phase. The three
+       * history positions precede the first four Gaussian input samples.
+       * The first prepared output uses this phase before adding pitch. */
+      dsp_decodeBrr(dsp, ch);
+      voice->pitchCounter = 3u << 12;
+      voice->keyOnReady = false;
+      voice->keyOnDelay = 5;
+      voice->sampleOut = 0;
+      dsp->ram[ch * 16 + 8] = dsp->ram[ch * 16 + 9] = 0;
+      return;
     }
   }
   // handle reset
