@@ -14,6 +14,7 @@
 
 #ifdef YI_ONLINE_RA
 #include "ra/yi_ra.h"
+#define SDL_RenderPresent YiRaPresent
 #endif
 #include "game_rtl.h"
 #include "common_rtl.h"
@@ -746,9 +747,6 @@ static void print_usage(const char *prog_name) {
 }
 
 int main(int argc, char **argv) {
-#ifdef YI_ONLINE_RA
-  atexit(YiRaShutdown);
-#endif
 #ifdef _WIN32
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD ft = (hOut && hOut != INVALID_HANDLE_VALUE) ? GetFileType(hOut) : FILE_TYPE_UNKNOWN;
@@ -798,6 +796,9 @@ int main(int argc, char **argv) {
   printf("  Super Mario World 2: Yoshi's Island (SNESRecomp Native AOT)   \n");
   printf("=================================================================\n");
 
+#ifdef YI_ONLINE_RA
+  atexit(YiRaShutdown);
+#endif
   char chosen_rom_path[1024] = {0};
 #ifdef RECOMP_LAUNCHER
   int flow = run_launcher_flow(argc, argv, cli_rom_abs, chosen_rom_path, sizeof(chosen_rom_path), &g_settings);
@@ -969,7 +970,6 @@ int main(int argc, char **argv) {
       if (event.type == SDL_QUIT) {
         running = false;
       } else if (event.type == SDL_KEYDOWN) {
-
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
         } else if (event.key.keysym.sym == SDLK_F11 ||
@@ -1008,9 +1008,6 @@ int main(int argc, char **argv) {
     SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
-#ifdef YI_ONLINE_RA
-    YiRaOverlay(renderer);
-#endif
     SDL_RenderPresent(renderer);
 
     static uint32_t s_frame_save_counter = 0;
@@ -1064,13 +1061,13 @@ int main(int argc, char **argv) {
     SDL_DestroyMutex(s_apu_mutex);
     s_apu_mutex = NULL;
   }
+#ifdef YI_ONLINE_RA
+  YiRaShutdown();
+#endif
   if (g_audiobuffer) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
-#ifdef YI_ONLINE_RA
-  YiRaShutdown();
-#endif
   if (texture) SDL_DestroyTexture(texture);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);

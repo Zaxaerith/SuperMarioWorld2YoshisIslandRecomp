@@ -437,3 +437,8 @@ extern "C" int YiRaTestPopup(SDL_Renderer *renderer) {
 extern "C" void YiRaDrawPanel(const char *path) {
   YiRaDrawLauncher(path, nullptr);
 }
+
+extern "C" void YiRaPresent(SDL_Renderer *renderer) {
+  YiRaOverlay(renderer);
+  SDL_RenderPresent(renderer);
+}
