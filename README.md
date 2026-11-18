@@ -1,5 +1,7 @@
 # SuperMarioWorld2YoshisIslandRecomp
 
+<a href="https://recomplauncher.com/game/supermarioworld2yoshisislandrecomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#building-from-source)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](#prerequisites)
 [![Language](https://img.shields.io/badge/language-C11%20%2F%20C%2B%2B17-orange)](#what-static-recompilation-means-here)
