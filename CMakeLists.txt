@@ -122,6 +122,15 @@ if(YI_BUILD_PLAY)
   endif()
 endif()
 
+
+option(YI_ONLINE_RA "Enable RetroAchievements Softcore integration (Windows)" ${WIN32})
+if(YI_ONLINE_RA)
+  if(NOT WIN32)
+    message(FATAL_ERROR "YI_ONLINE_RA requires the Windows HTTP and credential backend")
+  endif()
+  include(cmake/RetroAchievements.cmake)
+endif()
+
 # Headless Diagnostic Target (yi_headless)
 if(YI_BUILD_HEADLESS)
   add_executable(yi_headless src/headless.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})

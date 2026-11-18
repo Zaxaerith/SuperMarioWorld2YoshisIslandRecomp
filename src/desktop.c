@@ -12,6 +12,9 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
+#ifdef YI_ONLINE_RA
+#include "ra/yi_ra.h"
+#endif
 #include "game_rtl.h"
 #include "common_rtl.h"
 #include "cpu_state.h"
@@ -593,6 +596,11 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   snesrecomp_exe_dir_path("config.ini", g_config_path, sizeof(g_config_path));
   snesrecomp_exe_dir_path("keybinds.ini", g_keybinds_path, sizeof(g_keybinds_path));
 
+#ifdef YI_ONLINE_RA
+  char ra_preferences[1024];
+  snesrecomp_exe_dir_path("ra-online.ini",ra_preferences,sizeof(ra_preferences));
+  YiRaInit(ra_preferences);
+#endif
   load_launcher_settings(settings, g_config_path);
 
   bool force_launcher = false;
@@ -738,6 +746,9 @@ static void print_usage(const char *prog_name) {
 }
 
 int main(int argc, char **argv) {
+#ifdef YI_ONLINE_RA
+  atexit(YiRaShutdown);
+#endif
 #ifdef _WIN32
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD ft = (hOut && hOut != INVALID_HANDLE_VALUE) ? GetFileType(hOut) : FILE_TYPE_UNKNOWN;
@@ -903,6 +914,9 @@ int main(int argc, char **argv) {
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
+#ifdef YI_ONLINE_RA
+  YiRaStartGame(chosen_rom_path,g_ram,g_snes->cart->ram,g_snes->cart->ramSize);
+#endif
   int audio_rate = 44100;
 #ifdef RECOMP_LAUNCHER
   if (g_settings.audio_freq >= 8000 && g_settings.audio_freq <= 96000)
@@ -946,9 +960,16 @@ int main(int argc, char **argv) {
 
   while (running) {
     while (SDL_PollEvent(&event)) {
+#ifdef YI_ONLINE_RA
+      if(event.type==SDL_KEYDOWN && !event.key.repeat) {
+        if(event.key.keysym.sym==SDLK_F6) {YiRaOverview(0);continue;}
+        if(event.key.keysym.sym==SDLK_F10) {YiRaOverview((event.key.keysym.mod&KMOD_SHIFT)?-1:1);continue;}
+      }
+#endif
       if (event.type == SDL_QUIT) {
         running = false;
       } else if (event.type == SDL_KEYDOWN) {
+
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
         } else if (event.key.keysym.sym == SDLK_F11 ||
@@ -978,12 +999,18 @@ int main(int argc, char **argv) {
 
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
     RtlRunFrame(s_pad_state);
+#ifdef YI_ONLINE_RA
+    YiRaFrame();
+#endif
     GameDrawPpuFrame();
 
     /* Present active viewport */
     SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
+#ifdef YI_ONLINE_RA
+    YiRaOverlay(renderer);
+#endif
     SDL_RenderPresent(renderer);
 
     static uint32_t s_frame_save_counter = 0;
@@ -1041,6 +1068,9 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
+#ifdef YI_ONLINE_RA
+  YiRaShutdown();
+#endif
   if (texture) SDL_DestroyTexture(texture);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);

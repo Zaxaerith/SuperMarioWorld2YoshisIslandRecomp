@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/RetroAchievements/rcheevos",
+  "commit": "1433173220a7eaede6a9ed7a18e94117be1821e0",
+  "version": "12.5.0",
+  "license": "MIT; see LICENSE and THIRD-PARTY-NOTICES.txt",
+  "modifications": [
+    "src/rc_client.c: guard mastery processing after asynchronous game unload/logout."
+  ]
+}
