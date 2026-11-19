@@ -26,6 +26,7 @@ typedef struct DspChannel {
   uint16_t pitch;
   uint16_t pitchCounter;
   bool pitchModulation;
+  bool keyOnReady; // first prepared output; uses the previous padding byte
   // brr decoding
   int16_t decodeBuffer[19]; // 16 samples per brr-block, +3 for interpolation
   uint8_t srcn;
@@ -38,6 +39,8 @@ typedef struct DspChannel {
   uint16_t adsrRates[4]; // attack, decay, sustain, gain
   uint16_t rateCounter;
   uint8_t adsrState; // 0: attack, 1: decay, 2: sustain, 3: gain, 4: release
+  /* Occupies the previous padding byte; serialized layout stays stable. */
+  uint8_t keyOnDelay;
   uint16_t sustainLevel;
   bool useGain;
   uint8_t gainMode;
