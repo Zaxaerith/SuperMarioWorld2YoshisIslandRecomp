@@ -243,6 +243,12 @@ if(YI_BUILD_TESTS)
   endif()
   enable_testing()
   add_test(NAME raster_contract COMMAND raster_contract)
+
+  add_executable(dsp_keyon_contract tests/dsp_keyon_contract.c
+    ${SNESRECOMP_ROOT}/runner/src/snes/dsp.c)
+  target_include_directories(dsp_keyon_contract PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+  target_compile_definitions(dsp_keyon_contract PRIVATE SNESRECOMP_TRACE=0)
+  add_test(NAME dsp_keyon_contract COMMAND dsp_keyon_contract)
 endif()
 
 if(YI_BUILD_TESTS)
