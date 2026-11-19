@@ -561,6 +561,8 @@ static void load_launcher_settings(RecompLauncherCSettings *settings, const char
     settings->window_scale = val;
   if (ini_read_int(cfg_path, "Graphics", "Fullscreen", &val) && val >= 0 && val <= 2)
     settings->fullscreen = val;
+  if (ini_read_int(cfg_path, "Graphics", "VSync", &val) && (val==0 || val==1))
+    settings->vsync = val ? RECOMP_LAUNCHER_VSYNC_ON : RECOMP_LAUNCHER_VSYNC_OFF;
   if (ini_read_int(cfg_path, "Graphics", "LinearFiltering", &val))
     settings->linear_filter = val != 0;
   if (ini_read_string(cfg_path, "Graphics", "DisplayAspect", str, sizeof(str))) {
@@ -590,6 +592,8 @@ static void save_launcher_settings(const RecompLauncherCSettings *settings, cons
   launcher_ini_kv_write(cfg_path, "Graphics", "WindowScale", buf);
   snprintf(buf, sizeof(buf), "%d", settings->fullscreen);
   launcher_ini_kv_write(cfg_path, "Graphics", "Fullscreen", buf);
+  snprintf(buf, sizeof(buf), "%d", settings->vsync == RECOMP_LAUNCHER_VSYNC_ON ? 1 : 0);
+  launcher_ini_kv_write(cfg_path, "Graphics", "VSync", buf);
   snprintf(buf, sizeof(buf), "%d", settings->linear_filter ? 1 : 0);
   launcher_ini_kv_write(cfg_path, "Graphics", "LinearFiltering", buf);
   snprintf(buf, sizeof(buf), "%s", SnesDisplayAspect_Name(settings->aspect_index));
@@ -607,11 +611,31 @@ static void save_launcher_settings(const RecompLauncherCSettings *settings, cons
   launcher_ini_kv_write(cfg_path, "Controller", "DeadzoneP1", buf);
 }
 
+#ifdef RECOMP_LAUNCHER
+static int vsync_settings_selftest(void) {
+  const char *path="vsync-selftest.ini";
+  FILE *f=fopen(path,"rb");if(f){fclose(f);return 2;}
+  RecompLauncherCSettings settings={0};settings.vsync=RECOMP_LAUNCHER_VSYNC_OFF;
+  load_launcher_settings(&settings,path);
+  int ok=settings.vsync==RECOMP_LAUNCHER_VSYNC_OFF;
+  settings.vsync=RECOMP_LAUNCHER_VSYNC_ON;save_launcher_settings(&settings,path);
+  settings.vsync=RECOMP_LAUNCHER_VSYNC_OFF;load_launcher_settings(&settings,path);
+  ok &= settings.vsync==RECOMP_LAUNCHER_VSYNC_ON;
+  settings.vsync=RECOMP_LAUNCHER_VSYNC_OFF;save_launcher_settings(&settings,path);
+  settings.vsync=RECOMP_LAUNCHER_VSYNC_ON;load_launcher_settings(&settings,path);
+  ok &= settings.vsync==RECOMP_LAUNCHER_VSYNC_OFF;
+  launcher_ini_kv_write(path,"Graphics","VSync","17");
+  settings.vsync=RECOMP_LAUNCHER_VSYNC_OFF;load_launcher_settings(&settings,path);
+  ok &= settings.vsync==RECOMP_LAUNCHER_VSYNC_OFF;
+  remove(path);printf("VSync missing default, on/off persistence and invalid setting: %s\n",ok?"PASS":"FAIL");return ok?0:1;
+}
+#endif
 static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override, char *out_rom_path, size_t out_rom_cap, RecompLauncherCSettings *settings) {
   memset(settings, 0, sizeof(*settings));
   settings->window_scale = 3;
   settings->fullscreen = 0;
   settings->linear_filter = 1;
+  settings->vsync = RECOMP_LAUNCHER_VSYNC_OFF;
   settings->aspect_index = 0; /* 4:3 CRT default */
   settings->enable_audio = 1;
   settings->audio_freq = 44100;
@@ -699,6 +723,7 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   game.aspect_setting_label = "Aspect ratio";
   game.aspect_setting_help = "4:3 recreates standard CRT TV. 8:7 uses square pixels. 1:1 presents a square frame.";
   game.has_shader = 0;
+  game.has_vsync = 1;
   game.sram_path = g_active_sram_path;
   game.rom_cache_path = "rom.cfg";
   game.config_path = g_config_path;
@@ -803,6 +828,7 @@ static int effects_hotkey_selftest(void) {
 int main(int argc, char **argv) {
 #ifdef RECOMP_LAUNCHER
   if(argc==2 && !strcmp(argv[1],"--effects-selftest")) return effects_hotkey_selftest();
+  if(argc==2 && !strcmp(argv[1],"--vsync-selftest")) return vsync_settings_selftest();
 #endif
 #ifdef _WIN32
   HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -948,11 +974,25 @@ int main(int argc, char **argv) {
   }
 
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, linear_filter ? "1" : "0");
-  SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
+  bool vsync_requested = false;
+#ifdef RECOMP_LAUNCHER
+  vsync_requested = g_settings.vsync == RECOMP_LAUNCHER_VSYNC_ON;
+#endif
+  SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, vsync_requested ? "1" : "0", SDL_HINT_OVERRIDE);
 
-  SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED |
+      (vsync_requested ? SDL_RENDERER_PRESENTVSYNC : 0));
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) Die("SDL_CreateRenderer failed");
+#if SDL_VERSION_ATLEAST(2,0,18)
+  int vsync_result = SDL_RenderSetVSync(renderer, vsync_requested ? 1 : 0);
+#else
+  int vsync_result = 0;
+#endif
+  SDL_RendererInfo renderer_info;
+  if(SDL_GetRendererInfo(renderer,&renderer_info)==0)
+    printf("[Video] renderer=%s VSync requested=%s apply=%s\n",renderer_info.name,
+      vsync_requested?"on":"off",vsync_result==0?"ok":SDL_GetError());
 
   SDL_RenderSetLogicalSize(renderer, pres_w, pres_h);
 
