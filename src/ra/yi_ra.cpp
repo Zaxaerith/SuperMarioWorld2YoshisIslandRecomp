@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include "client/client.h"
+#include "preferences.h"
 #include "imgui.h"
 #include <SDL.h>
 #include <algorithm>
@@ -54,15 +55,7 @@ bool preferences_saved = true;
 void save_preferences() {
   if (preferences_path.empty())
     return;
-  auto temporary = preferences_path + ".tmp";
-  std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-  output << "[Mods]\nRetroAchievements=" << enabled << "\n";
-  output.flush();
-  bool ok = output.good();
-  output.close();
-  preferences_saved =
-      ok && MoveFileExA(temporary.c_str(), preferences_path.c_str(),
-                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+  preferences_saved=yira::save_ra_preference(std::filesystem::u8path(preferences_path),enabled);
 }
 const uint8_t *ram = nullptr;
 const uint8_t *sram = nullptr;
@@ -96,7 +89,7 @@ public:
   }
   bool restore(yira::Credential &c) override { return service->restore(c); }
   bool store(const yira::Credential &c) override { return service->store(c); }
-  void forget() override { service->forget(); }
+  bool forget() override { return service->forget(); }
   void cancel() override { service->cancel(); }
 };
 void ensure() {
@@ -173,15 +166,20 @@ SDL_Texture *make_texture(SDL_Renderer *renderer, const std::string &title,
 
 void YiRaInit(const char *path) {
   preferences_path = path ? path : "";
-  std::ifstream input(preferences_path);
+  std::ifstream input(std::filesystem::u8path(preferences_path),std::ios::binary);
   std::string line;
+  bool mods=false;bool first=true;
   while (std::getline(input, line)) {
-    if (!line.empty() && line.back() == '\r')
-      line.pop_back();
-    if (line == "RetroAchievements=1")
-      enabled = true;
-    else if (line == "RetroAchievements=0")
-      enabled = false;
+    if(first && line.compare(0,3,"\xef\xbb\xbf")==0)line.erase(0,3);
+    first=false;auto name=yira::ini_name(line);
+    if(!name.empty() && name.front()=='[') {
+      auto close=name.find(']');if(close!=std::string::npos)mods=yira::ini_name(name.substr(1,close-1))=="mods";
+    }
+    auto equals=name.find('=');
+    if(mods && equals!=std::string::npos && yira::ini_name(name.substr(0,equals))=="retroachievements") {
+      auto value=yira::ini_name(name.substr(equals+1));
+      if(value=="1")enabled=true;else if(value=="0")enabled=false;
+    }
   }
 }
 void YiRaDrawLauncher(const char *path, void *) {
@@ -386,7 +384,7 @@ extern "C" int YiRaTestSoftcoreTransport() {
     }
     bool restore(yira::Credential &) override { return false; }
     bool store(const yira::Credential &) override { return true; }
-    void forget() override {}
+    bool forget() override {return true;}
   };
   auto backend = std::make_unique<RecordingServices>();
   auto *recording = backend.get();

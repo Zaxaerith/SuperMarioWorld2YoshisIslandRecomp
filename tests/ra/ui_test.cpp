@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
   {
     std::ifstream file(prefs);
     std::string data((std::istreambuf_iterator<char>(file)), {});
-    assert(data.find("Unrelated=") == std::string::npos &&
+    assert(data.find("Unrelated=1") != std::string::npos &&
            data.find("RetroAchievements=0") != std::string::npos);
   }
   SDL_Surface *surface =

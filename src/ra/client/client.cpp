@@ -348,10 +348,11 @@ void Client::logout() {
   p->login_handle = nullptr;
   rc_client_reset(p->client);
   rc_client_logout(p->client);
-  p->services->forget();
+  const bool removed=p->services->forget();
   auto hash = p->view.hash;
   p->view = {};
   p->view.hash = hash;
+  if(!removed)p->view.message="Signed out; saved session could not be removed. Clear it before sharing this Windows account.";
   p->loading_hash.clear();
   p->popups.clear();
 }

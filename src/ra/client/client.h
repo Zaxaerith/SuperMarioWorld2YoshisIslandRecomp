@@ -19,7 +19,7 @@ struct Services {
   virtual Response http(const std::string &url, const std::string &body) = 0;
   virtual bool restore(Credential &) = 0;
   virtual bool store(const Credential &) = 0;
-  virtual void forget() = 0;
+  virtual bool forget() = 0; // False means secure storage could not be cleared.
   virtual void cancel() {
   } // Called on shutdown; implementations may interrupt HTTP.
 };

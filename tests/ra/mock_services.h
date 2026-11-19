@@ -20,7 +20,7 @@ struct Fixture {
   yira::Credential credential;
   std::atomic<unsigned> awards{0}, logins{0}, password_logins{0}, earned{0};
   std::atomic<bool> offline{false};
-  bool store_ok = true, pointer_case = false, remember_unlocks = false,
+  bool store_ok = true, forget_ok = true, pointer_case = false, remember_unlocks = false,
        login_rejected = false;
 };
 static const char *game =
@@ -104,5 +104,5 @@ struct Mock : yira::Services {
     f.credential = c;
     return true;
   }
-  void forget() override { f.credential = {}; }
+  bool forget() override {if(!f.forget_ok)return false;f.credential={};return true;}
 };

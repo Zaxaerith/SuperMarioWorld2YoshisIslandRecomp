@@ -61,7 +61,7 @@ bool protected_session(const std::wstring& target,Credential& value,bool write) 
         if(value.username.empty()||value.token.empty()||value.username.find('\n')!=std::string::npos)return false;
         bytes=value.username+"\n"+value.token;
         input.pbData=(BYTE*)bytes.data();input.cbData=(DWORD)bytes.size();
-        if(!CryptProtectData(&input,L"RetroAchievements session",nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&output))return false;
+        if(!CryptProtectData(&input,L"RetroAchievements session",nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&output)){SecureZeroMemory(bytes.data(),bytes.size());return false;}
         auto temp=path+L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";
         HANDLE file=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
         DWORD count=0;bool ok=file!=INVALID_HANDLE_VALUE;
@@ -208,7 +208,12 @@ struct Windows final : Services {
     if(CredWriteW(&credential,0)){DeleteFileW(session_file(target).c_str());return true;}
     auto copy=value;bool ok=protected_session(target,copy,true);SecureZeroMemory(copy.token.data(),copy.token.size());return ok;
   }
-  void forget() override { CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0);DeleteFileW(session_file(target).c_str()); }
+  bool forget() override {
+    const bool credential_removed=CredDeleteW(target.c_str(),CRED_TYPE_GENERIC,0)!=0 || GetLastError()==ERROR_NOT_FOUND;
+    const auto path=session_file(target);
+    const bool fallback_removed=!path.empty() && (DeleteFileW(path.c_str())!=0 || GetLastError()==ERROR_FILE_NOT_FOUND || GetLastError()==ERROR_PATH_NOT_FOUND);
+    return credential_removed && fallback_removed;
+  }
   void cancel() override {
     cancelled = true;
     std::lock_guard<std::mutex> lock(mutex);
