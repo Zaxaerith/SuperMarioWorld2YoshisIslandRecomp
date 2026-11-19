@@ -1,13 +1,12 @@
 # Experimental widescreen: review evidence and remaining checks
 
 19 November 2026. Main 1922348 includes audio#4 and VSync#8. Widescreen remains
-**off by default and experimental**. No complete-game/boss/Mode7/PAL guarantee.
-No camera or enemy activation expansion was added during this follow-up.
+**off by default and experimental**. Special-scene and broader PAL validation remain incomplete.
+Camera and enemy activation remain native.
 
 ## Evidence now available
 
-The contributor reports USA progress through **1-8**, extending the old1-6
-report. Logs show stage6/7 activity; this does not prove every intermediate room.
+The contributor reports USA progress through **1-8**. This is not a full-game validation.
 Current audited groups:38 USA +13 Europe Rev2. Of these,20 USA +12 PAL have
 actual active-wide frames; **all 32 preserve the complete native center RGB exactly**.
 Inactive wide buffers are excluded from this claim. Raw audit:
@@ -41,33 +40,19 @@ checked against the original BMP. Game imagery belongs to its rights holders.
 
 ## Autoscroller edge reach: different times, explicitly labelled
 
-The contributor requested separate-time comparisons where necessary. These
-images show Yoshi at the **left** boundary (partially clipped), not his complete
-travel path. Camera position/platforms differ: no pixel-identical scene claim.
-They do not demonstrate the right edge or push/crush behavior.
+These different-time images show the left edge; camera/platform positions differ.
+Right-edge crush/death in both views is contributor-confirmed, without a visual pair.
 
 | Original view66004820488 | Wide65962696005 |
 |---|---|
 | ![](widescreen/1-5-left-native.png) | ![](widescreen/1-5-left-wide.png) |
-
-## Boss comparison: post-defeat only
-
-Original88942096379 and wide88953806540 share logged camera416/1804 but differ
-in time and moving particles. The large active Salvo deformation is **not** shown.
-The wide frame has black extra columns on the left and scenery on the right;
-this limitation is retained, not painted over or called full bilateral coverage.
-
-| Original, different frame | Wide, post-defeat |
-|---|---|
-| ![](widescreen/1-8-native-other-time.png) | ![](widescreen/1-8-postboss-wide.png) |
 
 ## Existing bonus fallback
 
 Capture64794242507 is a genuine bonus Scratch board with `presentation_wide=0`.
 The preceding log explicitly re-enables widescreen and reports gate004
 (game-mode fallback) before the capture. Only its native buffer is shown; inactive `wide.bmp` is not presented as a wide
-frame. This closes the bonus fallback screenshot gap; it is not proof of a
-narrow terrain room or a Mode7 scene.
+frame. This demonstrates the bonus fallback only.
 
 ![Bonus board, native fallback](widescreen/bonus-native-fallback.png)
 
@@ -103,9 +88,7 @@ narrow terrain room or a Mode7 scene.
 F9 now uses the identical full-output readback helper from#6/#5: explicit output
 rectangle, initialized borders, opaque alpha, unchanged renderer settings.
 A uniquely named `ws_capture_contract` avoids target clashes with those PRs.
-Old native present screenshots with the viewport-offset bug are **not** used to
-judge game centering. Raw buffers remain valid. The later native PAL capture
-105317852361 already documents corrected 4:3 centering in#6.
+Corrected native 4:3 centering is pictured in #6.
 
 Shared launcher helper: accumulate/deduplicate callbacks per target, with six
 registration orders and target isolation checked. It matches#5/#6. The combined
