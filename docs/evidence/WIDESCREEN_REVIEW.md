@@ -122,11 +122,6 @@ separately; it runs only ROM-free contracts, never supplied ROMs or live gamepla
 
 ## Coverage limits
 
-Only the current review captures above are presented as visual evidence.
-Older screenshots submitted to report bugs are excluded, including pre-fix
-boss, vertical-scrolling, transition and narrow-room images. They do not
-represent the current native black top/bottom bands.
-
 The contributor confirms right-edge autoscroll crush/death in both 4:3 and
 16:9. This is an owner-observed gameplay result, not a frame-by-frame audit.
 Mode7 execution is recorded in runtime logs, but a matched visual pair is
