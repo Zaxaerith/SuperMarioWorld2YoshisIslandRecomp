@@ -48,14 +48,13 @@ Current evidence and remaining checks are in the
 [review matrix and paired gallery](evidence/WIDESCREEN_REVIEW.md): 38 USA and
 13 PAL capture groups, 32 active-wide centers RGB-identical, USA progress through
 1-8, left autoscroll edge, post-defeat boss arena and representative PAL 1-1.
-Previously omitted evidence now covers narrow-room fallback, real Mode7 runtime,
-active Burt, vertical movement and an iris transition. Right-edge crush is confirmed
-by the contributor in both views. A Mode7 visual capture and active Salvo remain
-uncaptured; those limits are explicit. No complete replay required.
+Right-edge crush is contributor-confirmed in both views. Current-build active
+boss deformation, paired Mode7 visuals and broader PAL/transition coverage remain
+incomplete. Widescreen stays experimental and off by default.
 
-For combined RA/filter testing, select native/wide source before 3x filtering,
-retain the same destination rectangle and apply account notifications afterward.
-The shared launcher helper must register all panels once. VSync On/Off must not
-change room eligibility, source dimensions or region pacing.
+Main now includes display filters. The shared presenter selects native/wide source,
+then applies the optional filter, then performs aspect-correct presentation.
+Both launcher panels are registered once. VSync On/Off does not change room
+eligibility, source dimensions or region pacing. RA is not included.
 
 When presentation_wide=0, wide.bmp is only a diagnostic buffer and may not be a current valid wide frame. Use info.txt/log plus present.bmp as the authoritative fallback evidence.
