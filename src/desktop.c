@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "yi_video_effects.h"
+#include "yi_effect_diagnostics.h"
 #include <string.h>
 
 #define SDL_MAIN_HANDLED
@@ -1044,6 +1045,7 @@ int main(int argc, char **argv) {
 
   refresh_controller_bindings();
 
+  bool capture_requested = false;
   bool running = true;
   SDL_Event event;
 
@@ -1067,6 +1069,8 @@ int main(int argc, char **argv) {
 #endif
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
+        } else if(event.key.keysym.sym==SDLK_F9 && !event.key.repeat) {
+          capture_requested=true;
         } else if (event.key.keysym.sym == SDLK_F11 ||
                    (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))) {
           static bool s_fs = false;
@@ -1099,12 +1103,20 @@ int main(int argc, char **argv) {
     /* Present active viewport */
     SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
     SDL_RenderClear(renderer);
-    if(effect_texture && g_video_effect && YiEffectApply(g_video_effect,fb_pixels,
-        256,224,256*4,effect_pixels,sizeof(effect_pixels))) {
+    uint64_t filter_start=SDL_GetPerformanceCounter();
+    bool filtered=effect_texture && g_video_effect && YiEffectApply(g_video_effect,fb_pixels,
+        256,224,256*4,effect_pixels,sizeof(effect_pixels));
+    uint64_t filter_ticks=SDL_GetPerformanceCounter()-filter_start;
+    if(filtered) {
       SDL_UpdateTexture(effect_texture,NULL,effect_pixels,256*12);
       SDL_RenderCopy(renderer,effect_texture,NULL,NULL);
     } else SDL_RenderCopy(renderer, texture, NULL, NULL);
+    if(capture_requested) {
+      YiEffectsCapture(renderer,fb_pixels,256,224,256*4,SDL_GetPerformanceCounter());
+      capture_requested=false;
+    }
     SDL_RenderPresent(renderer);
+    YiEffectsRecord(g_video_effect,256,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
     if (++s_frame_save_counter % 300 == 0) {
