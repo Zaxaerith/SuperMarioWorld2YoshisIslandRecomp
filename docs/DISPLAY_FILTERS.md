@@ -45,3 +45,7 @@ width, preserve the aspect-correct destination rectangle, and draw the RA overla
 last. A clean textual merge alone does not establish that ordering. Test both
 dimensions and fallback transitions; do not filter a stale 256-wide buffer while
 widescreen is active.
+
+## Reviewed Windows gameplay evidence
+
+See [screenshots, measurements and integration limits](evidence/DISPLAY_FILTERS_REVIEW.md).
