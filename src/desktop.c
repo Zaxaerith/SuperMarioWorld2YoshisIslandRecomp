@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "yi_video_effects.h"
+#include "yi_effect_diagnostics.h"
+#include "yi_presentation.h"
 #include <string.h>
 
 #define SDL_MAIN_HANDLED
@@ -64,6 +67,34 @@ static YiRomProfile s_rom_profile = YI_ROM_UNSUPPORTED;
 #ifdef RECOMP_LAUNCHER
 static RecompLauncherCSettings g_settings;
 static char g_config_path[1024] = "config.ini";
+static unsigned g_video_effect;
+static SDL_Keycode g_effect_hotkey = SDLK_F7;
+int YiEffectsLauncherMode(void) { return (int)g_video_effect; }
+void YiEffectsLauncherSetMode(int mode) {
+  if (mode < 0 || mode >= YI_EFFECT_COUNT) return;
+  g_video_effect = (unsigned)mode;
+  char value[16]; snprintf(value, sizeof(value), "%u", g_video_effect);
+  launcher_ini_kv_write(g_config_path, "Mods", "VideoEffect", value);
+}
+const char *YiEffectsLauncherHotkey(void) { return SDL_GetKeyName(g_effect_hotkey); }
+int YiEffectsLauncherSetHotkey(const char *name) {
+  SDL_Keycode key = SDL_GetKeyFromName(name);
+  if (!key || key == SDLK_ESCAPE || key == SDLK_RETURN || key == SDLK_F6 ||
+      key == SDLK_F8 || key == SDLK_F9 || key == SDLK_F10 || key == SDLK_F11 ||
+      key == SDLK_LCTRL || key == SDLK_RCTRL || key == SDLK_LALT || key == SDLK_RALT ||
+      key == SDLK_LSHIFT || key == SDLK_RSHIFT || key == SDLK_LGUI || key == SDLK_RGUI)
+    return 0;
+  SDL_Scancode scan = SDL_GetScancodeFromKey(key);
+  for (int button = 0; button < 12; ++button)
+    if (keybinds_get_button(1, button) == scan) return 0;
+  if (key > 0 && key < 128 && strchr("wasdjklizxcqe", (int)key)) return 0;
+  if (key == SDLK_SPACE || key == SDLK_TAB || key == SDLK_RSHIFT) return 0;
+  g_effect_hotkey = key;
+  char value[24]; snprintf(value, sizeof(value), "%d", (int)key);
+  launcher_ini_kv_write(g_config_path, "Mods", "EffectsKeycode", value);
+  return 1;
+}
+
 static bool g_widescreen;
 int YiWsLauncherEnabled(void) { return g_widescreen; }
 void YiWsLauncherSetEnabled(int enabled) {
@@ -626,6 +657,15 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   snesrecomp_exe_dir_path("keybinds.ini", g_keybinds_path, sizeof(g_keybinds_path));
 
   load_launcher_settings(settings, g_config_path);
+  int effect_value = 0;
+  if (ini_read_int(g_config_path,"Mods","VideoEffect",&effect_value) &&
+      effect_value >= 0 && effect_value < YI_EFFECT_COUNT) g_video_effect = (unsigned)effect_value;
+  /* Stored as SDL keycodes; validate using the same path as the launcher. */
+  int hotkey_value = 0;
+  if (ini_read_int(g_config_path,"Mods","EffectsKeycode",&hotkey_value))
+    YiEffectsLauncherSetHotkey(SDL_GetKeyName((SDL_Keycode)hotkey_value));
+
+
   int ws_value = 0;
   if (ini_read_int(g_config_path, "Mods", "Widescreen", &ws_value)) g_widescreen = ws_value != 0;
 
@@ -772,6 +812,31 @@ static void print_usage(const char *prog_name) {
   printf("  CRC32:   D138F224\n");
 }
 
+#ifdef RECOMP_LAUNCHER
+static int effects_hotkey_selftest(void) {
+  const char *path = "effects-selftest.ini";
+  FILE *existing = fopen(path,"rb");
+  if (existing) { fclose(existing); return 2; }
+  if (SDL_Init(SDL_INIT_EVENTS) != 0) return 3;
+  snprintf(g_config_path,sizeof(g_config_path),"%s",path);
+  int ok = YiEffectsLauncherSetHotkey("F2") && g_effect_hotkey == SDLK_F2 &&
+           !YiEffectsLauncherSetHotkey("F8") && g_effect_hotkey == SDLK_F2;
+  g_video_effect = 0;
+  const unsigned effect_cycle[]={4,1,2,3,0};
+  for (unsigned i=1;i<=YI_EFFECT_COUNT;++i) {
+    ok &= YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,false,false);
+    ok &= g_video_effect == effect_cycle[i-1];
+  }
+  ok &= YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,true,false) && g_video_effect==0;
+  ok &= !YiEffectKeyDown(&g_video_effect,g_effect_hotkey,SDLK_F2,false,true) && g_video_effect==0;
+  int saved=0;
+  ok &= ini_read_int(path,"Mods","EffectsKeycode",&saved) && saved == SDLK_F2;
+  remove(path);
+  SDL_Quit();
+  printf("Effects hotkey rebind, persistence, repeat and cycle: %s\n",ok?"PASS":"FAIL");
+  return ok?0:1;
+}
+#endif
 static void capture_ws_pixels(const char *path, const void *pixels, int width, int height, int pitch) {
   SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom((void *)pixels, width, height, 32, pitch, SDL_PIXELFORMAT_BGRA32);
   if (surface) { SDL_SaveBMP(surface, path); SDL_FreeSurface(surface); }
@@ -779,6 +844,7 @@ static void capture_ws_pixels(const char *path, const void *pixels, int width, i
 
 int main(int argc, char **argv) {
 #ifdef RECOMP_LAUNCHER
+  if(argc==2 && !strcmp(argv[1],"--effects-selftest")) return effects_hotkey_selftest();
   if(argc==2 && !strcmp(argv[1],"--vsync-selftest")) return vsync_settings_selftest();
 #endif
 #ifdef _WIN32
@@ -950,20 +1016,7 @@ int main(int argc, char **argv) {
 
   SDL_RenderSetLogicalSize(renderer, pres_w, pres_h);
 
-  SDL_Texture *texture = SDL_CreateTexture(
-    renderer,
-    SDL_PIXELFORMAT_BGRA32,
-    SDL_TEXTUREACCESS_STREAMING,
-    256, 224
-  );
-  if (texture) {
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
-  }
-
-  SDL_Texture *wide_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32,
-      SDL_TEXTUREACCESS_STREAMING, YI_WS_WIDTH, YI_WS_HEIGHT);
-  if (!wide_texture) Die("Widescreen texture allocation failed");
-  SDL_SetTextureBlendMode(wide_texture, SDL_BLENDMODE_NONE);
+  static YiPresentation presentation;
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
@@ -1014,6 +1067,13 @@ int main(int argc, char **argv) {
       if (event.type == SDL_QUIT) {
         running = false;
       } else if (event.type == SDL_KEYDOWN) {
+#ifdef RECOMP_LAUNCHER
+        if (YiEffectKeyDown(&g_video_effect,g_effect_hotkey,event.key.keysym.sym,
+            event.key.repeat != 0,(event.key.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) != 0)) {
+          if(!event.key.repeat) YiEffectsLauncherSetMode((int)g_video_effect);
+          continue;
+        }
+#endif
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
         } else if (event.key.keysym.sym == SDLK_F9 && !event.key.repeat) {
@@ -1051,13 +1111,11 @@ int main(int argc, char **argv) {
 
     /* Present active viewport */
     bool wide = YiWs11PresentationWide();
-    SDL_Texture *present = wide ? wide_texture : texture;
-    SDL_UpdateTexture(present,NULL,wide ? YiWs11Pixels() : fb_pixels,
-                      (wide ? YI_WS_WIDTH : 256)*4);
-    SDL_RenderSetLogicalSize(renderer,wide ? 2400 : pres_w,wide ? 1350 : pres_h);
-    SDL_RenderClear(renderer);
-    SDL_Rect picture={3,3,2394,1344};
-    SDL_RenderCopy(renderer,present,NULL,wide ? &picture : NULL);
+    const uint8_t* source=wide ? YiWs11Pixels() : fb_pixels;
+    unsigned source_width=wide ? YI_WS_WIDTH : 256;
+    uint64_t filter_ticks=0;
+    if(!YiPresentationDraw(&presentation,renderer,fb_pixels,YiWs11Pixels(),wide,g_video_effect,pres_w,pres_h,&filter_ticks))
+      Die("Presentation failed");
     if (capture_requested) {
       char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
       unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
@@ -1075,11 +1133,13 @@ int main(int argc, char **argv) {
       }
       snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
       FILE* info=fopen(info_path,"wb");
-      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested);fclose(info);}
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,YiEffectName(g_video_effect));fclose(info);}
       printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
+      YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
       capture_requested = false;
     }
     SDL_RenderPresent(renderer);
+    YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
     if (++s_frame_save_counter % 300 == 0) {
@@ -1136,8 +1196,7 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
-  SDL_DestroyTexture(wide_texture);
-  if (texture) SDL_DestroyTexture(texture);
+  YiPresentationDestroy(&presentation);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
   SDL_Quit();

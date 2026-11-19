@@ -1,6 +1,6 @@
 # Experimental widescreen: review evidence and remaining checks
 
-19 November 2026. Main 1922348 includes audio#4 and VSync#8. Widescreen remains
+19 November 2026. Main 7396f58 includes audio #4, VSync #8 and display filters #6. Widescreen remains
 **off by default and experimental**. Special-scene and broader PAL validation remain incomplete.
 Camera and enemy activation remain native.
 
@@ -14,7 +14,7 @@ Inactive wide buffers are excluded from this claim. Raw audit:
 
 Representative PAL evidence now exists: Rev2 level 1-1, native and wide outputs,
 all display filters, VSync on and~50 FPS. Other PAL levels/special scenes remain
-unverified. Filter and RA evidence is documented separately in#6/#5.
+unverified. Filter evidence is documented in #6.
 
 ## Same-frame native/wide pairs
 
@@ -85,20 +85,20 @@ frame. This demonstrates the bonus fallback only.
 
 ## Technical follow-up and integration
 
-F9 now uses the identical full-output readback helper from#6/#5: explicit output
+F9 now uses the identical full-output readback helper from #6: explicit output
 rectangle, initialized borders, opaque alpha, unchanged renderer settings.
 A uniquely named `ws_capture_contract` avoids target clashes with those PRs.
 Corrected native 4:3 centering is pictured in #6.
 
 Shared launcher helper: accumulate/deduplicate callbacks per target, with six
-registration orders and target isolation checked. It matches#5/#6. The combined
+registration orders and target isolation checked. It matches #6. The combined
 pipeline is native/wide source selection -> optional3x filtering -> correct
-presentation rectangle -> RA overlay last. Ordinary PAL/native/wide filter and
-USA notification captures exist. A textual merge must preserve that ordering;
-this standalone PR does not include RA or filter implementations.
+presentation rectangle. Ordinary PAL/native/wide filter and
+native/wide presentation checks pass. A textual merge must preserve that ordering;
+RA is not included; filters are inherited from main.
 
-Local Release: 8 registered ROM-free contracts passed, including USA/PAL
-widescreen (1847 assertions each), renderer readback, main VSync and launcher
+Local Release: 12 registered ROM-free contracts passed, including USA/PAL
+widescreen (1847 assertions each), all-mode native/wide presentation, renderer readback, VSync and launcher
 coexistence. Four real ROM layout-only checks passed without game execution.
 [Local results](widescreen/local-test-results.json). Hosted Windows CI is checked
 separately; it runs only ROM-free contracts, never supplied ROMs or live gameplay.
@@ -111,3 +111,13 @@ Mode7 execution is recorded in runtime logs, but a matched visual pair is
 not available. Current-build active boss deformation (including Salvo),
 further PAL special scenes and all transitions remain incompletely verified.
 The feature stays experimental and off by default pending maintainer review.
+
+## Integration after #6
+
+Updated onto main 7396f58. Desktop/CMake conflicts are resolved using one
+presenter: native/wide source selection -> optional filter -> aspect-correct output.
+The automated SDL presentation smoke test covers all five filters and repeated
+native/wide fallback, texture sizing, borders and unchanged source pixels.
+The generated launcher contains each panel exactly once; filter hotkey/persistence
+and VSync tests pass. Widescreen remains off by default and labelled experimental.
+No new real-game playthrough is claimed for this merge-resolution build.
