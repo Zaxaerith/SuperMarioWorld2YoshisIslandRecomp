@@ -1,3 +1,4 @@
+#include "../yi_capture.h"
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include "yi_ra.h"
@@ -382,10 +383,9 @@ static void capture_ra(SDL_Renderer* renderer,uint64_t id,bool fixture=false) {
   std::snprintf(image,sizeof(image),"ra-%llu-present.bmp",(unsigned long long)id);
   std::snprintf(metadata,sizeof(metadata),"ra-%llu-info.json",(unsigned long long)id);
   if(visible || fixture) {
-    int w=0,h=0;SDL_GetRendererOutputSize(renderer,&w,&h);
-    SDL_Surface* surface=SDL_CreateRGBSurfaceWithFormat(0,w,h,32,SDL_PIXELFORMAT_BGRA32);
+    SDL_Surface* surface=YiCaptureRenderer(renderer);
     if(surface) {
-      image_saved=SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_BGRA32,surface->pixels,surface->pitch)==0 && SDL_SaveBMP(surface,image)==0;
+      image_saved=SDL_SaveBMP(surface,image)==0;
       SDL_FreeSurface(surface);
     }
   }

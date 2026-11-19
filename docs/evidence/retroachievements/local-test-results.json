@@ -1,0 +1,142 @@
+[
+  {
+    "variant": "ra",
+    "test": "ra_preferences_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "ra_account_lifecycle_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "ra_ui_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "ra_persistence_write",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "ra_persistence_restore",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "ra_capture_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "pal_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "raster_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "dsp_keyon_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "launcher_panel_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "vsync_settings_contract",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "full-lifecycle",
+    "exit": 0
+  },
+  {
+    "variant": "ra",
+    "test": "client",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ra_preferences_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ra_ui_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ra_persistence_write",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ra_persistence_restore",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "pal_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "raster_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "dsp_keyon_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "video_effects_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "effects_capture_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "presentation_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ws_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "ws_pal_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "launcher_panel_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "vsync_settings_contract",
+    "exit": 0
+  },
+  {
+    "variant": "combined",
+    "test": "effects_hotkey_contract",
+    "exit": 0
+  }
+]

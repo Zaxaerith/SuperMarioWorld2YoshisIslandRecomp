@@ -211,6 +211,9 @@ struct Client::Impl {
       s.view.username.clear();
       s.view.message =
           "Sign-in failed. Check credentials and connection; try again.";
+      std::printf("[RA] sign-in failed: method=%s result=%d; retry available\n",
+                  s.restoring ? "restored-token" : "password", result);
+      std::fflush(stdout);
       return;
     }
     s.view.logged_in = true;
@@ -218,6 +221,7 @@ struct Client::Impl {
     const bool stored = s.services->store({user->username, user->token});
     s.session_saved = stored;
     std::printf("[RA] signed in: method=%s session_saved=%d\n",s.restoring?"restored-token":"password",stored);
+    std::fflush(stdout);
     s.view.message =
         stored ? "Signed in (Softcore)"
                : "Signed in; Windows could not save the session securely.";
@@ -300,9 +304,11 @@ struct Client::Impl {
       s.view.message =
           "Offline; pending unlocks will retry while the session is open.";
       std::printf("[RA] connection=offline; pending awards retry only while running\n");
+    std::fflush(stdout);
     } else if (e->type == RC_CLIENT_EVENT_RECONNECTED) {
       s.view.message = "Ready (Softcore)";
       std::printf("[RA] connection=reconnected\n");
+    std::fflush(stdout);
     } else if (e->type == RC_CLIENT_EVENT_SERVER_ERROR) {
       s.view.message =
           "RetroAchievements request failed; check your account/connection.";
@@ -366,6 +372,7 @@ void Client::logout() {
   rc_client_logout(p->client);
   const bool removed=p->services->forget();
   std::printf("[RA] signed out: saved_session_removed=%d\n",removed);
+    std::fflush(stdout);
   auto hash = p->view.hash;
   p->view = {};
   p->view.hash = hash;

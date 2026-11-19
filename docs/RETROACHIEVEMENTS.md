@@ -18,10 +18,13 @@ for game 558. This is owner-reported live evidence, not an automated account
 audit; no credentials or account exports are included. It must not be described
 as a mock-only validation. The seven achievements need not be earned again.
 
-The exact updated integration binary has not yet completed a new live lifecycle
-test. Still record: login/notification, token restore after normal process exit,
-sign out followed by restart without automatic login, and an interrupted
-connection followed by retry while the same session remains open. Pending awards
+The combined review build has live accepted-award and restored-token logs.
+The contributor confirms sign-out/restart stays signed out, and a real offline
+sign-in error followed by successful retry after reconnecting. The old build
+logs successful sign-ins but not the failed attempt; that distinction is retained
+in the [evidence matrix](evidence/RETROACHIEVEMENTS_REVIEW.md). No repeat playthrough
+or additional achievement is required.
+Pending awards
 are not durably queued across process exit. A popup can precede server acceptance;
 verify the account website or an accepted response, not just the popup counter.
 
@@ -66,6 +69,15 @@ response remains in the session log. F6 overview captures can document the visib
 account state, but do not prove that a new award was submitted. Synthetic test
 captures are marked fixture=true and excluded from PR evidence organization.
 
-The contributor plans their own new playthrough and will supply screenshots and
-runtime evidence afterward. Do not treat capture tooling or old images as the
-new build's gameplay acceptance. No progress is reset automatically.
+Live owner gameplay and lifecycle observations are now recorded in the evidence
+matrix. Fixture images remain separate and are never presented as genuine awards.
+No progress is reset automatically.
+
+## ROM-free lifecycle CI
+
+`ra_account_lifecycle_contract` uses the production client with mock HTTP/storage
+and no ROM. It verifies offline sign-in and successful retry, rejected credentials,
+storage failure reporting, token restore, logout followed by no restore, and
+shutdown while HTTP is blocked. The full `ra_lifecycle_test <USA ROM>` additionally
+covers real-file hashing, mocked award retry and late responses across logout.
+Neither test signs into an actual account or submits real achievements.

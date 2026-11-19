@@ -1,0 +1,28 @@
+# Session 20261119-133522
+[RA] signed in: method=restored-token session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] award accepted: id=1300 total=1 http=200
+[RA] shutdown: HTTP cancelled, worker joined; accepted=1
+# Session 20261119-140602
+[RA] signed in: method=restored-token session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] award accepted: id=186901 total=1 http=200
+[RA] award accepted: id=186926 total=2 http=200
+[RA] award accepted: id=1305 total=3 http=200
+[RA] award accepted: id=5962 total=4 http=200
+[RA] shutdown: HTTP cancelled, worker joined; accepted=4
+# Session 20261119-145927
+[RA] signed in: method=restored-token session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] signed out: saved_session_removed=1
+[RA] shutdown: HTTP cancelled, worker joined; accepted=0
+# Session 20261119-145934
+[RA] signed in: method=password session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] signed out: saved_session_removed=1
+[RA] signed in: method=password session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] signed out: saved_session_removed=1
+[RA] signed in: method=password session_saved=1
+[RA] loaded exact hash=cb472164c5a71ccd3739963390ec6a50 game=558 console=3 total=63 observer=0
+[RA] shutdown: HTTP cancelled, worker joined; accepted=0

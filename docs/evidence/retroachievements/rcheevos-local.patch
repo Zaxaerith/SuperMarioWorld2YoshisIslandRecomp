@@ -1,0 +1,11 @@
+--- upstream/src/rc_client.c
++++ local/src/rc_client.c
+@@ -4731 +4731,2 @@
+-      if (award_achievement_response.achievements_remaining == 0) {
++      /* A successful in-flight award may arrive after logout/media unload. */
++      if (award_achievement_response.achievements_remaining == 0 && ach_data->client->game) {
+@@ -6220,0 +6222,4 @@
++  /* unload_game detaches the game before draining its pending UI events. */
++  if (!client->game)
++    return;
++

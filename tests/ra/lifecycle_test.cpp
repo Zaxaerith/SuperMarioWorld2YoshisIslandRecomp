@@ -57,8 +57,59 @@ struct AwardBlockMock final : Mock {
     return Mock::http(url, body);
   }
 };
+// ROM-free account flow: this also runs on hosted Windows CI.
+static void account_flow() {
+  Fixture f;
+  {
+    yira::Client c(std::make_unique<Mock>(f), memory);
+    f.offline = true;
+    c.login("Fixture", "MockPassword");
+    wait(c, [&] { return !c.status().busy; });
+    assert(!c.status().logged_in && f.credential.token.empty());
+    f.offline = false;
+    c.login("Fixture", "MockPassword");
+    wait(c, [&] { return c.status().logged_in; });
+    assert(!f.credential.token.empty());
+  }
+  const auto passwords = f.password_logins.load();
+  {
+    yira::Client c(std::make_unique<Mock>(f), memory);
+    c.restore();
+    wait(c, [&] { return c.status().logged_in; });
+    assert(f.password_logins == passwords);
+    c.logout();
+    assert(!c.status().logged_in && f.credential.token.empty());
+  }
+  {
+    yira::Client c(std::make_unique<Mock>(f), memory);
+    c.restore(); c.pump();
+    assert(!c.status().logged_in && !c.status().busy);
+    f.login_rejected = true;
+    c.login("Fixture", "MockPassword");
+    wait(c, [&] { return !c.status().busy; });
+    assert(!c.status().logged_in && f.credential.token.empty());
+    f.login_rejected = false; f.store_ok = false;
+    c.login("Fixture", "MockPassword");
+    wait(c, [&] { return c.status().logged_in; });
+    assert(f.credential.token.empty() && c.status().message.find("could not save") != std::string::npos);
+  }
+  {
+    Fixture pending;
+    Block block;
+    auto c = std::make_unique<yira::Client>(std::make_unique<BlockingMock>(pending, block), memory);
+    c->login("Fixture", "MockPassword");
+    {
+      std::unique_lock<std::mutex> lock(block.mutex);
+      assert(block.wake.wait_for(lock, std::chrono::seconds(2), [&] { return block.started; }));
+    }
+    auto start = std::chrono::steady_clock::now(); c.reset();
+    assert(block.cancelled && std::chrono::steady_clock::now() - start < std::chrono::seconds(2));
+  }
+  std::puts("PASS ROM-free mocked account: offline sign-in/retry, secure restore, logout/no restore, rejected login, store failure, blocked HTTP cancellation. No live account/network/game.");
+}
 int main(int argc, char **argv) {
-  assert(argc == 2);
+  assert(argc == 1 || argc == 2);
+  if (argc == 1) { owner = std::this_thread::get_id(); account_flow(); return 0; }
   owner = std::this_thread::get_id();
   Fixture f;
   f.remember_unlocks = true;
