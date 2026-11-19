@@ -17,8 +17,13 @@ static int review(SDL_Surface *source, unsigned id) {
   SDL_Surface *canvas = SDL_CreateRGBSurfaceWithFormat(
       0, s->w * 3, s->h * 3, 32, SDL_PIXELFORMAT_BGRA32);
   SDL_Renderer *renderer = canvas ? SDL_CreateSoftwareRenderer(canvas) : NULL;
+  SDL_Texture *texture =
+      renderer ? SDL_CreateTextureFromSurface(renderer, s) : NULL;
+  if (!texture || SDL_RenderCopy(renderer, texture, NULL, NULL) != 0)
+    return 1;
+  SDL_DestroyTexture(texture);
   if (!renderer ||
-      !YiEffectsCapture(renderer, s->pixels, s->w, s->h, s->pitch, id))
+      !YiEffectsCapture(renderer, s->pixels, s->w, s->h, s->pitch, id, -1))
     return 1;
   for (unsigned mode = 1; mode < YI_EFFECT_COUNT; ++mode) {
     char name[128];
@@ -69,6 +74,14 @@ int main(int argc, char **argv) {
         ((uint32_t *)((uint8_t *)source->pixels + y * source->pitch))[x] =
             0xff000000u | (x * 17u << 8) | (y * 31u);
     int result = review(source, i + 1);
+    if(!result) {
+      const unsigned selected_id=100+i;
+      if(!YiEffectsCapture(NULL,source->pixels,source->w,source->h,source->pitch,selected_id,YI_EFFECT_CRT))return 1;
+      char name[128];snprintf(name,sizeof(name),"effects-%u-CRT.bmp",selected_id);
+      SDL_Surface* captured=SDL_LoadBMP(name);if(!captured)return 1;SDL_FreeSurface(captured);
+      snprintf(name,sizeof(name),"effects-%u-Sharp.bmp",selected_id);
+      FILE* unexpected=fopen(name,"rb");if(unexpected){fclose(unexpected);return 1;}
+    }
     SDL_FreeSurface(source);
     if (result)
       return result;

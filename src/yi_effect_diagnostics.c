@@ -16,8 +16,10 @@ static bool save_pixels(const char *name, void *pixels, int w, int h,
   return ok;
 }
 bool YiEffectsCapture(SDL_Renderer *renderer, const uint8_t *source, unsigned w,
-                      unsigned h, unsigned pitch, uint64_t id) {
-  if (!source || !w || w > 342 || !h || h > 224 || pitch < w * 4)
+                      unsigned h, unsigned pitch, uint64_t id,
+                      int selected_mode) {
+  if (!source || !w || w > 342 || !h || h > 224 || pitch < w * 4 ||
+      selected_mode < -1 || selected_mode >= YI_EFFECT_COUNT)
     return false;
   uint8_t *pixels = malloc((size_t)w * h * 36);
   if (!pixels)
@@ -28,6 +30,8 @@ bool YiEffectsCapture(SDL_Renderer *renderer, const uint8_t *source, unsigned w,
            (unsigned long long)id);
   ok = save_pixels(path, (void *)source, w, h, pitch) && ok;
   for (unsigned mode = 1; mode < YI_EFFECT_COUNT; ++mode) {
+    if (selected_mode >= 0 && (unsigned)selected_mode != mode)
+      continue;
     snprintf(path, sizeof(path), "effects-%llu-%s.bmp", (unsigned long long)id,
              YiEffectName(mode));
     ok = YiEffectApply(mode, source, w, h, pitch, pixels, (size_t)w * h * 36) &&
@@ -49,9 +53,12 @@ bool YiEffectsCapture(SDL_Renderer *renderer, const uint8_t *source, unsigned w,
       SDL_FreeSurface(present);
     ok = saved && ok;
   }
-  printf("[EffectsCapture] id=%llu source=%ux%u result=%s; same-frame modes, "
+  printf("[EffectsCapture] id=%llu source=%ux%u result=%s mode=%s; same-frame "
+         "source, "
          "before RA overlay\n",
-         (unsigned long long)id, w, h, ok ? "ok" : "failed");
+         (unsigned long long)id, w, h, ok ? "ok" : "failed",
+         selected_mode < 0 ? "all (offline tool)"
+                           : YiEffectName((unsigned)selected_mode));
   return ok;
 }
 static double process_seconds(void) {

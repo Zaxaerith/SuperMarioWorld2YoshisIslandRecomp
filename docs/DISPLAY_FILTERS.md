@@ -6,9 +6,9 @@ Build `video_effects_contract` and run `ctest --test-dir build -R video_effects_
 
 ## Local review captures and performance
 
-F9 saves Original plus all four processed modes from the **same emulated frame**,
+F9 saves Original plus the currently selected processed mode from the **same emulated frame**,
 and the current final renderer image as `effects-<id>-*.bmp`. The raw Original is
-256x224 (342x224 with optional widescreen); filtered images are exactly 3x that
+256x224 (342x224 with optional widescreen); the selected filtered image is exactly 3x that
 size. Use the final `present.bmp` to assess display aspect and final SDL scaling.
 Capture happens before the RA overlay, so account text is not added to the image.
 All files stay local; no capture is automatically uploaded.

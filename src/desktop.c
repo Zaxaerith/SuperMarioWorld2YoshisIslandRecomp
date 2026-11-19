@@ -1112,7 +1112,7 @@ int main(int argc, char **argv) {
       SDL_RenderCopy(renderer,effect_texture,NULL,NULL);
     } else SDL_RenderCopy(renderer, texture, NULL, NULL);
     if(capture_requested) {
-      YiEffectsCapture(renderer,fb_pixels,256,224,256*4,SDL_GetPerformanceCounter());
+      YiEffectsCapture(renderer,fb_pixels,256,224,256*4,SDL_GetPerformanceCounter(),(int)g_video_effect);
       capture_requested=false;
     }
     SDL_RenderPresent(renderer);
