@@ -1,3 +1,4 @@
+#include "yi_capture.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_video_effects.h"
 #include <stdio.h>
@@ -38,14 +39,9 @@ bool YiEffectsCapture(SDL_Renderer *renderer, const uint8_t *source, unsigned w,
          save_pixels(path, pixels, w * 3, h * 3, w * 12) && ok;
   }
   free(pixels);
-  int rw = 0, rh = 0;
-  if (renderer && SDL_GetRendererOutputSize(renderer, &rw, &rh) == 0 &&
-      rw > 0 && rh > 0) {
-    SDL_Surface *present =
-        SDL_CreateRGBSurfaceWithFormat(0, rw, rh, 32, SDL_PIXELFORMAT_BGRA32);
-    bool saved =
-        present && SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_BGRA32,
-                                        present->pixels, present->pitch) == 0;
+  if (renderer) {
+    SDL_Surface *present = YiCaptureRenderer(renderer);
+    bool saved = present != NULL;
     snprintf(path, sizeof(path), "effects-%llu-present.bmp",
              (unsigned long long)id);
     saved = saved && SDL_SaveBMP(present, path) == 0;
