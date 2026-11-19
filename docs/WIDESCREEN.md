@@ -55,3 +55,5 @@ For combined RA/filter testing, select native/wide source before 3x filtering,
 retain the same destination rectangle and apply account notifications afterward.
 The shared launcher helper must register all panels once. VSync On/Off must not
 change room eligibility, source dimensions or region pacing.
+
+When presentation_wide=0, wide.bmp is only a diagnostic buffer and may not be a current valid wide frame. Use info.txt/log plus present.bmp as the authoritative fallback evidence.

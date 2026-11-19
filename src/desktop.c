@@ -1075,7 +1075,7 @@ int main(int argc, char **argv) {
       }
       snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
       FILE* info=fopen(info_path,"wb");
-      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested);fclose(info);}
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested);fclose(info);}
       printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
       capture_requested = false;
     }
