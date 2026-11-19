@@ -43,6 +43,20 @@ struct BlockingMock final : Mock {
     block.wake.notify_all();
   }
 };
+struct AwardBlockMock final : Mock {
+  Block &block;
+  AwardBlockMock(Fixture &f, Block &b) : Mock(f), block(b) {}
+  yira::Response http(const std::string &url,
+                      const std::string &body) override {
+    if (body.find("r=awardachievement") != std::string::npos) {
+      std::unique_lock<std::mutex> lock(block.mutex);
+      block.started = true;
+      block.wake.notify_all();
+      block.wake.wait(lock, [&] { return block.cancelled; });
+    }
+    return Mock::http(url, body);
+  }
+};
 int main(int argc, char **argv) {
   assert(argc == 2);
   owner = std::this_thread::get_id();
@@ -98,6 +112,35 @@ int main(int argc, char **argv) {
     assert(!c.status().logged_in &&
            c.status().message.find("could not be removed") !=
                std::string::npos);
+  }
+  {
+    Fixture pending;
+    pending.awards = 1;
+    Block block;
+    ram[0x100] = 0;
+    sram[0x10] = 0;
+    yira::Client c(std::make_unique<AwardBlockMock>(pending, block), memory);
+    c.set_observer(false);
+    c.select_rom(argv[1]);
+    c.login("Fixture", "MockPassword");
+    wait(c, [&] { return c.status().ready; });
+    c.frame();
+    ram[0x100] = 1;
+    c.frame();
+    {
+      std::unique_lock<std::mutex> lock(block.mutex);
+      assert(block.wake.wait_for(lock, std::chrono::seconds(2),
+                                 [&] { return block.started; }));
+    }
+    c.logout();
+    {
+      std::lock_guard<std::mutex> lock(block.mutex);
+      block.cancelled = true;
+      block.wake.notify_all();
+    }
+    wait(c, [&] { return c.diagnostics().award_accepted == 1; });
+    assert(!c.status().logged_in && !c.status().ready);
+    assert(!c.confirmed_award(900001));
   }
   {
     Fixture pending;

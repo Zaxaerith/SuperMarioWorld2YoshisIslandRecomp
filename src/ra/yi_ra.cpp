@@ -64,6 +64,7 @@ uint8_t preview_ram[0x20000]{}, preview_sram[0x10000]{};
 char username[96]{}, password[256]{};
 yira::Popup popup;
 uint64_t popup_until = 0;
+uint64_t capture_pending = 0;
 SDL_Texture *popup_texture = nullptr;
 std::string texture_key;
 uint32_t RC_CCONV read(uint32_t address, uint8_t *out, uint32_t bytes,
@@ -373,7 +374,37 @@ void YiRaShutdown() {
   popup_texture = nullptr;
   SecureZeroMemory(password, sizeof(password));
 }
+void YiRaCaptureNextPresent(uint64_t id) {capture_pending=id;}
+static void capture_ra(SDL_Renderer* renderer,uint64_t id,bool fixture=false) {
+  const bool visible=enabled && client && (overview || SDL_GetTicks64()<popup_until);
+  bool image_saved=false;
+  char image[128],metadata[128];
+  std::snprintf(image,sizeof(image),"ra-%llu-present.bmp",(unsigned long long)id);
+  std::snprintf(metadata,sizeof(metadata),"ra-%llu-info.json",(unsigned long long)id);
+  if(visible || fixture) {
+    int w=0,h=0;SDL_GetRendererOutputSize(renderer,&w,&h);
+    SDL_Surface* surface=SDL_CreateRGBSurfaceWithFormat(0,w,h,32,SDL_PIXELFORMAT_BGRA32);
+    if(surface) {
+      image_saved=SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_BGRA32,surface->pixels,surface->pitch)==0 && SDL_SaveBMP(surface,image)==0;
+      SDL_FreeSurface(surface);
+    }
+  }
+  yira::Diagnostics d; yira::Status status;
+  if(client){d=client->diagnostics();status=client->status();}
+  const unsigned popup_id=visible && !overview?popup.achievement_id:0;
+  bool confirmed=popup_id && client && client->confirmed_award(popup_id);
+  std::ofstream out(metadata,std::ios::binary);
+  out<<"{\n  \"capture_id\": \""<<id<<"\",\n  \"fixture\": "<<(fixture?"true":"false")
+     <<",\n  \"overlay_visible\": "<<(visible?"true":"false")<<",\n  \"overview\": "<<(overview?"true":"false")
+     <<",\n  \"image_saved\": "<<(image_saved?"true":"false")<<",\n  \"game_id\": "<<d.game_id
+     <<",\n  \"popup_achievement_id\": "<<popup_id<<",\n  \"server_confirmed_for_popup\": "<<(confirmed?"true":"false")
+     <<",\n  \"triggered\": "<<d.triggered<<",\n  \"submitted\": "<<d.award_requests
+     <<",\n  \"accepted_responses\": "<<d.award_accepted<<",\n  \"last_accepted_id\": "<<d.last_award_id
+     <<",\n  \"last_award_http\": "<<d.last_award_http<<",\n  \"account_unlocked_count\": "<<status.unlocked<<"\n}\n";
+  std::printf("[RA] F9 id=%llu overlay=%d image=%d popup_id=%u server_confirmed=%d\n",(unsigned long long)id,visible,image_saved,popup_id,confirmed);
+}
 #ifdef YI_RA_TEST_UI
+extern "C" void YiRaTestCapture(SDL_Renderer* renderer,uint64_t id){capture_ra(renderer,id,true);}
 extern "C" int YiRaTestSoftcoreTransport() {
   class RecordingServices final : public yira::Services {
   public:
@@ -438,5 +469,6 @@ extern "C" void YiRaDrawPanel(const char *path) {
 
 extern "C" void YiRaPresent(SDL_Renderer *renderer) {
   YiRaOverlay(renderer);
+  if(capture_pending){capture_ra(renderer,capture_pending);capture_pending=0;}
   SDL_RenderPresent(renderer);
 }

@@ -11,6 +11,7 @@ void YiRaStartGame(const char *rom_path, const uint8_t *ram,
 void YiRaFrame(void);
 void YiRaOverlay(struct SDL_Renderer *renderer);
 void YiRaPresent(struct SDL_Renderer *renderer);
+void YiRaCaptureNextPresent(uint64_t capture_id);
 void YiRaOverview(int action);
 void YiRaShutdown(void);
 #ifdef __cplusplus

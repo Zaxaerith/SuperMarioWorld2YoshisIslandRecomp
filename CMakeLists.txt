@@ -255,3 +255,15 @@ if(YI_BUILD_TESTS)
   target_compile_definitions(dsp_keyon_contract PRIVATE SNESRECOMP_TRACE=0)
   add_test(NAME dsp_keyon_contract COMMAND dsp_keyon_contract)
 endif()
+
+if(YI_BUILD_TESTS)
+  add_test(NAME launcher_panel_contract COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
+    -S "${CMAKE_CURRENT_SOURCE_DIR}/tests/launcher_panel"
+    -B "${CMAKE_CURRENT_BINARY_DIR}/panel-contract"
+    "-DYI_PANEL_HELPER=${CMAKE_CURRENT_SOURCE_DIR}/cmake/YiLauncherPanel.cmake"
+    "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
+endif()
+
+if(YI_BUILD_TESTS AND YI_BUILD_PLAY)
+  add_test(NAME vsync_settings_contract COMMAND yoshis_island_recomp --vsync-selftest)
+endif()

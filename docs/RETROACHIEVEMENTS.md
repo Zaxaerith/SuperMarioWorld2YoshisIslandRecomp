@@ -53,3 +53,19 @@ account steps above and full integration with filters/widescreen require separat
 evidence. PAL online awards remain outside this PR's supported scope.
 
 After building `yi_ra_ui_test`, run `ctest --test-dir build -R ra_ui_contract --output-on-failure`. This checks the UI, notification rendering and simulated submission transport without an account or ROM. For the client and exact ROM identity checks, run `yi_ra_test.exe <USA ROM> <Europe Rev 1 ROM> <Europe Rev 2 ROM>` and `yi_ra_ui_test.exe popup.bmp <USA ROM> <Europe Rev 0 ROM> <Europe Rev 1 ROM> <Europe Rev 2 ROM>`. These tests use mock HTTP responses.
+
+## F9 evidence capture
+
+F9 saves a separate `ra-<id>-present.bmp` after the RA overlay is drawn, when an
+RA popup or overview is visible. `ra-<id>-info.json` records only goal IDs and
+counters, plus whether the popup goal has an accepted server response. A normal
+scene capture remains separate and has no RA overlay. No passwords, tokens or
+account names enter the metadata. These are local diagnostic files, not uploads.
+A capture made before acceptance is explicitly unconfirmed; the later accepted
+response remains in the session log. F6 overview captures can document the visible
+account state, but do not prove that a new award was submitted. Synthetic test
+captures are marked fixture=true and excluded from PR evidence organization.
+
+The contributor plans their own new playthrough and will supply screenshots and
+runtime evidence afterward. Do not treat capture tooling or old images as the
+new build's gameplay acceptance. No progress is reset automatically.

@@ -1014,6 +1014,10 @@ int main(int argc, char **argv) {
       } else if (event.type == SDL_KEYDOWN) {
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
+#ifdef YI_ONLINE_RA
+        } else if(event.key.keysym.sym==SDLK_F9 && !event.key.repeat) {
+          YiRaCaptureNextPresent(SDL_GetPerformanceCounter());
+#endif
         } else if (event.key.keysym.sym == SDLK_F11 ||
                    (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))) {
           static bool s_fs = false;

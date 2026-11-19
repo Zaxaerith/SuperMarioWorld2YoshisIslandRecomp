@@ -10,6 +10,7 @@ extern "C" int YiRaTestRomAllowed(const char *);
 extern "C" int YiRaTestBlockedStart(const char *);
 extern "C" int YiRaTestSavePreferences();
 extern "C" int YiRaTestPopup(SDL_Renderer *);
+extern "C" void YiRaTestCapture(SDL_Renderer*,uint64_t);
 int main(int argc, char **argv) {
   assert(argc == 2 || argc == 6);
   if (argc == 6) {
@@ -41,6 +42,11 @@ int main(int argc, char **argv) {
   SDL_Renderer *renderer = SDL_CreateSoftwareRenderer(surface);
   assert(renderer);
   assert(YiRaTestPopup(renderer));
+  YiRaTestCapture(renderer,900001);
+  {
+    std::ifstream file("ra-900001-info.json");std::string data((std::istreambuf_iterator<char>(file)),{});
+    assert(data.find("\"fixture\": true")!=std::string::npos && data.find("\"image_saved\": true")!=std::string::npos && data.find("\"server_confirmed_for_popup\": false")!=std::string::npos);
+  }
   SDL_RenderPresent(renderer);
   unsigned varied = 0;
   auto *pixels = (uint32_t *)surface->pixels;

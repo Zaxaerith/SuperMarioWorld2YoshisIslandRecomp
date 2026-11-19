@@ -9,6 +9,7 @@
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <set>
 #include <thread>
 
 namespace yira {
@@ -51,9 +52,11 @@ struct Client::Impl {
   Status view;
   Diagnostics diagnostics;
   std::string path, loading_hash;
-  bool notifications = true, stop = false, session_saved = true;
+  bool notifications = true, stop = false, session_saved = true, restoring=false;
   std::atomic<bool> closing{false};
   uint64_t frames = 0, media_generation = 0;
+  uint64_t account_generation=0;
+  std::set<unsigned> accepted_ids;
   std::deque<Popup> popups;
   std::mutex mutex;
   std::condition_variable wake;
@@ -97,6 +100,7 @@ struct Client::Impl {
     worker.join();
     // Finish callbacks while the session/game is still owned by rc_client.
     pump();
+    std::printf("[RA] shutdown: HTTP cancelled, worker joined; accepted=%u\n",diagnostics.award_accepted);
     rc_client_reset(client);
     rc_client_logout(client);
     rc_client_destroy(client);
@@ -139,10 +143,11 @@ struct Client::Impl {
     std::string url = req->url ? req->url : "",
                 body = req->post_data ? req->post_data : "";
     const bool award = body.find("r=awardachievement") != std::string::npos;
+    const auto account_generation=s.account_generation;
     if (award)
       ++s.diagnostics.award_requests;
     s.enqueue([&s, url = std::move(url), body = std::move(body), callback, data,
-               award]() mutable {
+               award,account_generation]() mutable {
       Response response;
       try {
         if (!s.closing)
@@ -152,7 +157,7 @@ struct Client::Impl {
       }
       std::fill(body.begin(), body.end(),
                 '\0'); // Includes transient password/token POST bodies.
-      s.complete([&s, response = std::move(response), callback, data, award] {
+      s.complete([&s, response = std::move(response), callback, data, award,account_generation] {
         rc_api_server_response_t r{};
         r.body = response.body.empty() ? nullptr : response.body.data();
         r.body_length = response.body.size();
@@ -167,6 +172,9 @@ struct Client::Impl {
               parsed.response.succeeded) {
             ++s.diagnostics.award_accepted;
             s.diagnostics.last_award_id = parsed.awarded_achievement_id;
+            if(account_generation==s.account_generation && s.view.logged_in)s.accepted_ids.insert(parsed.awarded_achievement_id);
+            std::printf("[RA] award accepted: id=%u total=%u http=%d\n",parsed.awarded_achievement_id,s.diagnostics.award_accepted,r.http_status_code);
+            std::fflush(stdout);
           }
           rc_api_destroy_award_achievement_response(&parsed);
         }
@@ -209,6 +217,7 @@ struct Client::Impl {
     s.view.username = user->display_name ? user->display_name : user->username;
     const bool stored = s.services->store({user->username, user->token});
     s.session_saved = stored;
+    std::printf("[RA] signed in: method=%s session_saved=%d\n",s.restoring?"restored-token":"password",stored);
     s.view.message =
         stored ? "Signed in (Softcore)"
                : "Signed in; Windows could not save the session securely.";
@@ -285,14 +294,16 @@ struct Client::Impl {
         rc_client_achievement_get_image_url(
             &a, RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED, url, sizeof(url));
         s.popups.push_back({a.title ? a.title : "Achievement unlocked",
-                            a.description ? a.description : "", url, a.points});
+                            a.description ? a.description : "", url, a.points,a.id});
       }
-    } else if (e->type == RC_CLIENT_EVENT_DISCONNECTED)
+    } else if (e->type == RC_CLIENT_EVENT_DISCONNECTED) {
       s.view.message =
           "Offline; pending unlocks will retry while the session is open.";
-    else if (e->type == RC_CLIENT_EVENT_RECONNECTED)
+      std::printf("[RA] connection=offline; pending awards retry only while running\n");
+    } else if (e->type == RC_CLIENT_EVENT_RECONNECTED) {
       s.view.message = "Ready (Softcore)";
-    else if (e->type == RC_CLIENT_EVENT_SERVER_ERROR) {
+      std::printf("[RA] connection=reconnected\n");
+    } else if (e->type == RC_CLIENT_EVENT_SERVER_ERROR) {
       s.view.message =
           "RetroAchievements request failed; check your account/connection.";
       if (s.view.hash == "8de2ee0b0bdbdde16aefedecfb837971")
@@ -321,6 +332,8 @@ void Client::login(const char *username, const char *password) {
     p->view.ready = false;
   }
   p->view.busy = true;
+  p->restoring=false;
+  ++p->account_generation;p->accepted_ids.clear();
   p->view.message = "Signing in...";
   p->login_handle = rc_client_begin_login_with_password(
       p->client, username, password, Impl::logged, p.get());
@@ -337,18 +350,22 @@ void Client::restore() {
   if (!p->services->restore(c))
     return;
   p->view.busy = true;
+  p->restoring=true;
+  ++p->account_generation;p->accepted_ids.clear();
   p->view.message = "Restoring secure session...";
   p->login_handle = rc_client_begin_login_with_token(
       p->client, c.username.c_str(), c.token.c_str(), Impl::logged, p.get());
   std::fill(c.token.begin(), c.token.end(), '\0');
 }
 void Client::logout() {
+  ++p->account_generation;p->accepted_ids.clear();
   if (p->login_handle)
     rc_client_abort_async(p->client, p->login_handle);
   p->login_handle = nullptr;
   rc_client_reset(p->client);
   rc_client_logout(p->client);
   const bool removed=p->services->forget();
+  std::printf("[RA] signed out: saved_session_removed=%d\n",removed);
   auto hash = p->view.hash;
   p->view = {};
   p->view.hash = hash;
@@ -402,6 +419,7 @@ void Client::frame() {
   }
 }
 void Client::reset() { rc_client_reset(p->client); }
+bool Client::confirmed_award(unsigned id) const{return p->view.logged_in && p->accepted_ids.count(id)!=0;}
 void Client::set_notifications(bool v) {
   p->notifications = v;
   if (!v)

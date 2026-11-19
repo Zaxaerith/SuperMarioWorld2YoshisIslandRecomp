@@ -39,6 +39,7 @@ struct Achievement {
 struct Popup {
   std::string title, description, badge_url;
   unsigned points = 0;
+  unsigned achievement_id = 0;
 };
 /* Read-only counters; never contain account names, credentials or HTTP bodies.
  */
@@ -73,6 +74,7 @@ public:
   uint64_t evaluated_frames() const;
   bool hardcore() const;
   Diagnostics diagnostics() const;
+  bool confirmed_award(unsigned achievement_id) const;
   std::vector<Achievement>
   achievements() const; // read-only official account state
   static bool can_query_hash(const std::string &);

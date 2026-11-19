@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
     c.frame();
     wait(c, [&] { return c.diagnostics().award_accepted == 2; });
     assert(fixture.awards == 2 && c.status().unlocked == 2 && !c.hardcore());
+    assert(c.confirmed_award(900001) && c.confirmed_award(900002));
     yira::Popup popup;
     bool ram_popup = false, sram_popup = false;
     while (c.take_popup(popup)) {
@@ -92,6 +93,7 @@ int main(int argc, char **argv) {
     }
     assert(ram_popup && sram_popup);
     c.logout();
+    assert(!c.confirmed_award(900001));
     assert(!c.status().logged_in && fixture.credential.token.empty());
     c.login("Fixture", "MockPassword");
     wait(c, [&] { return c.status().ready; });
