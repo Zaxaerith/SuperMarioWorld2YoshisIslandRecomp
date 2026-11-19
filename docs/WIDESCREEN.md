@@ -8,7 +8,8 @@ Active supported autoscrollers move the player's edge limits outward by 43 pixel
 
 Validation: `ws_contract` and `ws_pal_contract` use synthetic cartridges and require no game ROM. Both are registered with CTest. To check a supplied ROM's layout without executing it, use `ws_contract --layout-only "path/to/ROM.sfc"`. These checks do not replace gameplay testing.
 
-Reported manual USA testing reached 1-6 without major issues. Remaining levels and the complete game are not claimed to be verified.
+Contributor-reported USA gameplay now reaches 1-8. Active boss transformations,
+right-edge autoscroll/crush behavior and complete-game compatibility remain unverified.
 
 ## Exposed edges, collisions and fallback policy
 
@@ -43,13 +44,12 @@ and scene. Raw image sizes are 256x224 / 342x224 and use SNES pixel geometry;
 the final presented image is the aspect-ratio reference. Keep the matching log.
 F8 changes view for live comparison. Capture both sides of a scene transition.
 
-Known existing evidence: contributor-reported USA progression through 1-6 and
-local image pairs from earlier builds. These are useful prior observations,
-not a blanket pass for this updated binary or all scenes. Required remaining
-samples: an autoscroller (left/right reach and crush/death behavior), a boss,
-Mode 7/map UI, door/pipe/fade transition, narrow room, normal and vertical PAL
-scenes, and objects at exposed edges. Use an already available save and take
-these incrementally; a full uninterrupted playthrough is not required.
+Current evidence and remaining checks are in the
+[review matrix and paired gallery](evidence/WIDESCREEN_REVIEW.md): 38 USA and
+13 PAL capture groups, 32 active-wide centers RGB-identical, USA progress through
+1-8, left autoscroll edge, post-defeat boss arena and representative PAL 1-1.
+Still needed: active boss deformation, right autoscroll edge/push/crush,
+vertical/transition and narrow/Mode7 fallback samples. No complete replay required.
 
 For combined RA/filter testing, select native/wide source before 3x filtering,
 retain the same destination rectangle and apply account notifications afterward.

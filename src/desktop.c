@@ -1,3 +1,4 @@
+#include "yi_capture.h"
 /*
  * Super Mario World 2: Yoshi's Island (SNESRecomp Native AOT Desktop Player)
  * Real-time SDL2 interactive host: PAL/NTSC gameplay, authentic PPU/APU, SuperFX GSU,
@@ -1067,10 +1068,9 @@ int main(int argc, char **argv) {
       capture_ws_pixels(native_path, fb_pixels, 256, 224, 256 * 4);
       capture_ws_pixels(wide_path, YiWs11Pixels(), YI_WS_WIDTH, 224, YI_WS_WIDTH * 4);
       snprintf(present_path,sizeof(present_path),"ws-%llu-present.bmp",capture_id);
-      int capture_w=0,capture_h=0;SDL_GetRendererOutputSize(renderer,&capture_w,&capture_h);
-      SDL_Surface* capture=SDL_CreateRGBSurfaceWithFormat(0,capture_w,capture_h,32,SDL_PIXELFORMAT_BGRA32);
+      SDL_Surface* capture=YiCaptureRenderer(renderer);
       if(capture) {
-        if(SDL_RenderReadPixels(renderer,NULL,SDL_PIXELFORMAT_BGRA32,capture->pixels,capture->pitch)==0)SDL_SaveBMP(capture,present_path);
+        SDL_SaveBMP(capture,present_path);
         SDL_FreeSurface(capture);
       }
       snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
