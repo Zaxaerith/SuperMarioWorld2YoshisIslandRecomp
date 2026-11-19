@@ -1058,7 +1058,7 @@ int main(int argc, char **argv) {
     SDL_Rect picture={3,3,2394,1344};
     SDL_RenderCopy(renderer,present,NULL,wide ? &picture : NULL);
     if (capture_requested) {
-      char native_path[128],wide_path[128],terrain_path[128];
+      char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
       unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
       snprintf(native_path,sizeof(native_path),"ws-%llu-native.bmp",capture_id);
       snprintf(wide_path,sizeof(wide_path),"ws-%llu-wide.bmp",capture_id);
@@ -1066,6 +1066,16 @@ int main(int argc, char **argv) {
       YiWs11CaptureTerrain(terrain_path);
       capture_ws_pixels(native_path, fb_pixels, 256, 224, 256 * 4);
       capture_ws_pixels(wide_path, YiWs11Pixels(), YI_WS_WIDTH, 224, YI_WS_WIDTH * 4);
+      snprintf(present_path,sizeof(present_path),"ws-%llu-present.bmp",capture_id);
+      int capture_w=0,capture_h=0;SDL_GetRendererOutputSize(renderer,&capture_w,&capture_h);
+      SDL_Surface* capture=SDL_CreateRGBSurfaceWithFormat(0,capture_w,capture_h,32,SDL_PIXELFORMAT_BGRA32);
+      if(capture) {
+        if(SDL_RenderReadPixels(renderer,NULL,SDL_PIXELFORMAT_BGRA32,capture->pixels,capture->pitch)==0)SDL_SaveBMP(capture,present_path);
+        SDL_FreeSurface(capture);
+      }
+      snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
+      FILE* info=fopen(info_path,"wb");
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested);fclose(info);}
       printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
       capture_requested = false;
     }
