@@ -1,0 +1,50 @@
+# r13 capture of the small room; ws-session.log line159
+[WS11] sides=0/43 nonBlack=0/0 color=22 windows=222222 main/sub=15/02
+[WS11] F9 local terrain evidence: saved
+[WS11] F9 capture id=544885770966: wide=1 room=USA room 02 (mode 5)
+[WS11] field=1500 world=0 build=integrated-20261118-r13
+[WS11] 16:9 mode=0f stage=2 levelMode=5 sprites=matched captures=713 wide=1089 tileReject=225 spriteMiss=340 camera=0,1804 PPU=69 BG1SC=69 room=1690b5
+# r14 live fallback/boss/vertical/transition; ws-session.log line349
+[WS11] field=8344 world=0 build=integrated-20261118-r14
+[WS11] native fallback mode=0c stage=2 levelMode=5 sprites=native-only captures=6909 wide=7897 tileReject=779 spriteMiss=352 camera=0,1804 PPU=69 BG1SC=69 room=1690b5
+[WS11] gate=800 reasons=bounded-room, message=0 auto=0 cameraEvent=0 form=0 transform=0 scroll=0,0 owner=00 id=061 state=10
+[WS11] frameGate=800 tileCause=none roomProfile=USA room 02 (mode 5)
+[WS11] sides=0/0 nonBlack=0/0 color=10 windows=030333 main/sub=17/00
+# r14 live fallback/boss/vertical/transition; ws-session.log line1636
+[WS11] sides=43/0 nonBlack=4812/0 color=22 windows=000020 main/sub=12/05
+[WS11] F9 local terrain evidence: saved
+[WS11] F9 capture id=560228934263: wide=1 room=USA room 3D (mode 5)
+[WS11] field=53400 world=0 build=integrated-20261118-r14
+[WS11] 16:9 mode=0f stage=3 levelMode=5 sprites=matched captures=49927 wide=45408 tileReject=2253 spriteMiss=578 camera=128,1804 PPU=69 BG1SC=69 room=14878f
+# r14 live fallback/boss/vertical/transition; ws-session.log line1177
+[WS11] sides=0/43 nonBlack=0/7403 color=22 windows=000000 main/sub=15/02
+[WS11] F9 local terrain evidence: saved
+[WS11] F9 capture id=557355499776: wide=1 room=USA room 03 (mode 7)
+[WS11] field=36000 world=0 build=integrated-20261118-r14
+[WS11] 16:9 mode=0f stage=3 levelMode=7 sprites=matched captures=33071 wide=30647 tileReject=1951 spriteMiss=486 camera=53,1804 PPU=69 BG1SC=69 room=14869d
+# r14 live fallback/boss/vertical/transition; ws-session.log line1343
+[WS11] sides=43/43 nonBlack=8579/8709 color=22 windows=000000 main/sub=11/06
+[WS11] F9 local terrain evidence: saved
+[WS11] F9 capture id=558600790835: wide=1 room=USA room 03 (mode 7)
+[WS11] field=43500 world=0 build=integrated-20261118-r14
+[WS11] 16:9 mode=0f stage=3 levelMode=7 sprites=matched captures=40465 wide=38147 tileReject=2040 spriteMiss=487 camera=1125,1036 PPU=69 BG1SC=69 room=14869d
+# r14 live fallback/boss/vertical/transition; ws-session.log line314
+[WS11] sides=43/0 nonBlack=8458/0 color=22 windows=000000 main/sub=17/00
+[WS11] F9 local terrain evidence: saved
+[WS11] F9 capture id=552641290214: wide=1 room=USA room 01 (mode 0)
+[WS11] field=7617 world=0 build=integrated-20261118-r14
+[WS11] 16:9 mode=10 stage=1 levelMode=0 sprites=matched captures=6643 wide=7171 tileReject=358 spriteMiss=351 camera=0,0 PPU=69 BG1SC=69 room=4ce976
+# 19 Nov combined review live Mode7/bounded-room; review-20261119-140602.log line100
+[WS11] sides=0/0 nonBlack=0/0 color=00 windows=000000 main/sub=00/00
+[WS11] field=600 world=0
+[WS11] 16:9 mode=0a stage=0 levelMode=0 sprites=native-only captures=11 wide=245 tileReject=0 spriteMiss=228 camera=0,96 PPU=07 BG1SC=30 room=000000
+[WS11] gate=000 reasons=none (gate open; tile checks can still reject) message=0 auto=11662 cameraEvent=0 form=0 transform=0 scroll=0,96 owner=00 id=700 state=64873
+[WS11] frameGate=000 tileCause=none roomProfile=Centered UI / wide background
+[WS11] sides=43/43 nonBlack=9632/9632 color=00 windows=000032 main/sub=17/00
+# 19 Nov combined review live Mode7/bounded-room; review-20261119-140602.log line153
+[WS11] field=1041 world=0
+[WS11] native fallback mode=0c stage=6 levelMode=3 sprites=native-only captures=237 wide=635 tileReject=6 spriteMiss=363 camera=0,1804 PPU=22 BG1SC=69 room=12cf07
+[WS11] gate=800 reasons=bounded-room, message=0 auto=0 cameraEvent=0 form=0 transform=0 scroll=0,0 owner=00 id=061 state=10
+[WS11] frameGate=800 tileCause=none roomProfile=USA room 06 (mode 3)
+[WS11] sides=0/0 nonBlack=0/0 color=10 windows=030333 main/sub=17/00
+[WS11] field=1042 world=0

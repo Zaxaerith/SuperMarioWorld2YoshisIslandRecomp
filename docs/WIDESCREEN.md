@@ -8,8 +8,8 @@ Active supported autoscrollers move the player's edge limits outward by 43 pixel
 
 Validation: `ws_contract` and `ws_pal_contract` use synthetic cartridges and require no game ROM. Both are registered with CTest. To check a supplied ROM's layout without executing it, use `ws_contract --layout-only "path/to/ROM.sfc"`. These checks do not replace gameplay testing.
 
-Contributor-reported USA gameplay now reaches 1-8. Active boss transformations,
-right-edge autoscroll/crush behavior and complete-game compatibility remain unverified.
+Contributor-reported USA gameplay now reaches 1-8. Right-edge crush/death in both views is owner-confirmed; historical active Burt,
+scrolling and narrow-room evidence are indexed. Complete-game compatibility is not claimed.
 
 ## Exposed edges, collisions and fallback policy
 
@@ -48,8 +48,10 @@ Current evidence and remaining checks are in the
 [review matrix and paired gallery](evidence/WIDESCREEN_REVIEW.md): 38 USA and
 13 PAL capture groups, 32 active-wide centers RGB-identical, USA progress through
 1-8, left autoscroll edge, post-defeat boss arena and representative PAL 1-1.
-Still needed: active boss deformation, right autoscroll edge/push/crush,
-vertical/transition and narrow/Mode7 fallback samples. No complete replay required.
+Previously omitted evidence now covers narrow-room fallback, real Mode7 runtime,
+active Burt, vertical movement and an iris transition. Right-edge crush is confirmed
+by the contributor in both views. A Mode7 visual capture and active Salvo remain
+uncaptured; those limits are explicit. No complete replay required.
 
 For combined RA/filter testing, select native/wide source before 3x filtering,
 retain the same destination rectangle and apply account notifications afterward.

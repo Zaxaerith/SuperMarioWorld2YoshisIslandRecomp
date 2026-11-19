@@ -120,31 +120,86 @@ coexistence. Four real ROM layout-only checks passed without game execution.
 [Local results](widescreen/local-test-results.json). Hosted Windows CI is checked
 separately; it runs only ROM-free contracts, never supplied ROMs or live gameplay.
 
-## Remaining targeted owner gameplay checks
+## Follow-up correction: evidence that was already present
 
-No repeat full playthrough and no repeated RA/filter acceptance needed.
-Use existing saves; complete these when the relevant scenes are accessible:
+The earlier gap list was too broad: it omitted older user captures and real
+Mode7/bounded-room log records. Do not ask the contributor to repeat those tests
+simply because they were not initially indexed.
 
-1. **Autoscroller1-5:** right reachable edge, plus one practical push/terrain/
-   crush-or-death observation. Compare native/wide withF8. Left-edge images already
-   exist; don't repeat them solely for this review. Note if crush cannot be
-   checked safely in the available situation instead of inventing a pass.
-2. **Active boss:** one F9 capture while Salvo in1-8 is large/deforming, with a
-   short F8 comparison. Prefer Europe Rev2 to fill both boss and PAL-special-scene
-   gaps; USA still provides useful boss evidence. The post-win scene is done.
-3. **Vertical + transition:** one reachable upward/downward scrolling room and
-   a door/pipe/fade before/after. Inspect both added edges for stale tiles/masks.
-   An ordinary cave pair alone is not proof of vertical movement/transition.
-4. **Fallback / Mode7:** one narrow single-screen room and the available
-   map/Mode7 view. Record what stays native versus wide; native fallback can be
-   the correct result. The bonus-board fallback is already pictured above; no repeat needed. No need
-   to unlock new worlds solely for this check.
-5. While doing those cases, observe eggs/aiming/HUD/objects near both exposed
-   edges. Report disruptive behavior; original activation/pop-in is documented,
-   not promised to be eliminated. No activation/camera patch is requested.
+### Narrow room: the requested F9 image exists
 
-F9 once per relevant state and a short observation are enough. If a scene is not
-accessible, keep that case explicitly unverified and retain experimental scope.
-The agent does not start/play the game or fabricate runtime approval.
+Capture **544885770966** shows the small room with the green pipe. The r13 log
+identifies stage2 (1-3), room02, camera0/1804. The contributor remembered it as
+approximately1-2; the capture, rather than that approximate level number, is the
+reference. The raw native screenshot below is the actual user capture.
 
-[Sanitized scene/fallback log excerpts](widescreen/live-ws-excerpts.txt) accompany the pictures; no RA/account records or personal paths are included.
+![Previously requested small-room F9](widescreen/historical-narrow-native.png)
+
+Important chronology: the r13 capture was made **before** the bounded-room fix;
+it reported wide=1. The later r14 live log for the same room explicitly records
+`native fallback`, `gate=800 reasons=bounded-room`, zero extra side widths, and
+widescreen enabled. The latest combined review also logs bounded-room fallback
+in stage6/room06. Thus real narrow-room execution/fallback evidence exists.
+Do not relabel the old photo as a new-build post-fix capture, or a diagnostic
+replay image as live gameplay. No repeated narrow-room test is requested.
+
+### Genuine Mode7 is already in live logs
+
+For example, the latest USA review session records `PPU=07`, gameplay mode0a,
+`16:9`, gate000 and `Centered UI / wide background`. Actual Mode7 execution is
+therefore present in current runtime evidence, not only synthetic contracts.
+PAL sessions also contain `PPU=07` with explicit native fallback during map/UI
+transitions. This does not prove all Mode7 scenes visually perfect.
+
+No actual F9 photo among the audited images is matched to that Mode7 interval.
+The remaining gap is a **paired visual capture**, not an untested runtime path.
+Also, `levelMode=7` in the fortress is an unrelated level-layout value: its
+`PPU=69` means hardware background mode1, and is not counted as Mode7 proof.
+
+### Right-edge push/crush: owner-confirmed, both views
+
+On19 November2026 the contributor explicitly confirmed that they let Yoshi be
+crushed at the **right** autoscroll edge and die in **both4:3 and16:9**.
+Record this as a real owner-observed gameplay test, not a mock test and not a
+video/frame-by-frame audit. The older left-edge photographs remain separate.
+The requested practical right-edge/crush comparison is completed; no repeat
+crush/death or new playthrough is requested merely to create another screenshot.
+
+### Active boss, vertical scrolling and transition images also exist
+
+The r14 user images below supplement the newer evidence. They are labelled
+historical, not current-binary acceptance. At the time, vertical expansion also
+filled the top8 formerly blank rows; RGB differences against native are confined
+to those rows, with rows8–223 matching exactly. The newer32/32 center-preservation
+claim above is unchanged and applies only to the newer capture set.
+[Measured historical differences](widescreen/historical-pair-checks.json).
+
+| Existing test | Native | Wide |
+|---|---|---|
+| Active large Burt,1-4 ·560228934263 | ![](widescreen/historical-burt-active-native.png) | ![](widescreen/historical-burt-active-wide.png) |
+|1-4 lower area ·557355499776, camera0/1804 | ![](widescreen/historical-vertical-bottom-native.png) | ![](widescreen/historical-vertical-bottom-wide.png) |
+| Same fortress room, upper area ·558600790835, camera1350/1036 | ![](widescreen/historical-vertical-upper-native.png) | ![](widescreen/historical-vertical-upper-wide.png) |
+|1-2 closing/iris transition ·552641290214, mode10 | ![](widescreen/historical-iris-transition-native.png) | ![](widescreen/historical-iris-transition-wide.png) |
+
+These are genuine F9 images, not recreated scenes. Different camera positions
+and a visible closing mask provide existing representative scrolling/transition
+evidence; they are not a guarantee that every door/pipe/fade is correct.
+An active boss scene is already pictured (Burt). **Active Salvo** is still not
+pictured; the newer Salvo frames remain post-defeat only. That is a specific
+coverage limitation, not absence of any active-boss testing.
+
+## What really remains
+
+- For a complete visual Mode7 set, one F9 capture while the actual Mode7/title/
+  island view is visible is still missing. No full replay; the log identifies
+  the state. If not supplied, retain the visual limitation explicitly.
+- Active Salvo, further PAL special scenes and every possible transition are
+  not fully verified. Keep those as scope limits of this experimental feature,
+  not a new mandatory whole-game checklist. Existing representative cases above
+  are not erased simply because a newer test package exists.
+- Maintainer integration/security/rendering review and any newly observed
+  regression remain open. No claim of complete-game or all-boss compatibility.
+
+[Sanitized exact narrow/Mode7/boss/scroll/transition log contexts](widescreen/narrow-mode7-historical-excerpts.txt)
+accompany this correction. Right-edge crush is clearly attributed to the
+contributor's live report; it is not fabricated from those unrelated logs.
