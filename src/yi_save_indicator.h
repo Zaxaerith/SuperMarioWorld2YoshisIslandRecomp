@@ -4,21 +4,42 @@
 #include <stdbool.h>
 #include <string.h>
 /* Yoshi's permanent files, backups and checksums. Exclude volatile GSU RAM. */
-enum { YI_SAVE_BEGIN=0x7c00, YI_SAVE_END=0x7e7c };
+enum { YI_SAVE_BEGIN=0x7c00, YI_SAVE_END=0x7e7c, YI_SAVE_SLOT_SIZE=104, YI_SAVE_PAYLOAD_SIZE=3*YI_SAVE_SLOT_SIZE };
+
 typedef struct YiSaveIndicator {
-  Uint8 saved[YI_SAVE_END-YI_SAVE_BEGIN];
+  Uint8 saved[YI_SAVE_PAYLOAD_SIZE];
   bool initialized,failed;
   Uint64 until;
 } YiSaveIndicator;
+static unsigned YiSaveIndicatorWord(const Uint8 *p) {return p[0]|((unsigned)p[1]<<8);}
+static bool YiSaveIndicatorSlotValid(const Uint8 *ram,unsigned data,unsigned checksum) {
+  unsigned sum=0;for(unsigned i=0;i<YI_SAVE_SLOT_SIZE;i+=2)sum+=YiSaveIndicatorWord(ram+data+i);
+  return ((0x7777u-sum)&65535u)==YiSaveIndicatorWord(ram+checksum);
+}
+/* The game can temporarily invalidate a primary while its native backup is
+ * valid. Compare recoverable slot contents, not scratch changes/checksums. */
+static bool YiSaveIndicatorPayload(const Uint8 *ram,size_t size,Uint8 *out) {
+  if(!ram || size<YI_SAVE_END)return false;
+  for(unsigned slot=0;slot<3;++slot){
+    unsigned primary=YI_SAVE_BEGIN+slot*YI_SAVE_SLOT_SIZE;
+    unsigned backup=0x7d38+slot*YI_SAVE_SLOT_SIZE;
+    unsigned source;
+    if(YiSaveIndicatorSlotValid(ram,primary,0x7e70+slot*2))source=primary;
+    else if(YiSaveIndicatorSlotValid(ram,backup,0x7e76+slot*2))source=backup;
+    else return false;
+    memcpy(out+slot*YI_SAVE_SLOT_SIZE,ram+source,YI_SAVE_SLOT_SIZE);
+  }
+  return true;
+}
 static void YiSaveIndicatorLoaded(YiSaveIndicator *s,const Uint8 *ram,size_t size) {
   memset(s,0,sizeof(*s));
-  if(ram && size>=YI_SAVE_END){memcpy(s->saved,ram+YI_SAVE_BEGIN,sizeof(s->saved));s->initialized=true;}
+  s->initialized=YiSaveIndicatorPayload(ram,size,s->saved);
 }
 static void YiSaveIndicatorWritten(YiSaveIndicator *s,const Uint8 *ram,size_t size,bool success,Uint64 now) {
-  if(!success){s->failed=true;s->until=now+5000;return;}
-  if(!ram || size<YI_SAVE_END)return;
-  bool changed=!s->initialized || memcmp(s->saved,ram+YI_SAVE_BEGIN,sizeof(s->saved));
-  memcpy(s->saved,ram+YI_SAVE_BEGIN,sizeof(s->saved));s->initialized=true;
+  Uint8 payload[YI_SAVE_PAYLOAD_SIZE];
+  if(!success || !YiSaveIndicatorPayload(ram,size,payload)){s->failed=true;s->until=now+5000;return;}
+  bool changed=!s->initialized || memcmp(s->saved,payload,sizeof(payload));
+  memcpy(s->saved,payload,sizeof(payload));s->initialized=true;
   if(changed || s->failed){s->failed=false;s->until=now+1400;}
 }
 static const char *YiSaveIndicatorLabel(const YiSaveIndicator *s,Uint64 now) {
