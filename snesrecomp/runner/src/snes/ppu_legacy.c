@@ -6,9 +6,9 @@
 #include "snes.h"
 #include "snes_regs.h"
 
-static void ppu_render_pixel(Ppu *ppu, int x, int y);
+static void ppu_render_pixel(Ppu *ppu, int x, int y, PpuBgCoordinateOverride coordinates, const void *context);
 static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
-                             int *r, int *g, int *b);
+                             int *r, int *g, int *b, PpuBgCoordinateOverride coordinates, const void *context);
 static uint16_t ppu_read_offset(const Ppu *ppu, int col, int row);
 static int ppu_sample_bg(Ppu *ppu, int x, int y, int layer, bool priority);
 static void ppu_apply_offset_per_tile(const Ppu *ppu, int layer, int *lx, int *ly);
@@ -72,24 +72,28 @@ void ppu_draw_whole_line_legacy(Ppu *ppu, int line) {
   int left = -ppu->extraLeftCur;
   int right = 256 + ppu->extraRightCur;
   for (int x = left; x < right; x++) {
-    ppu_render_pixel(ppu, x, line);
+    ppu_render_pixel(ppu, x, line, NULL, NULL);
   }
 }
 
 void ppu_draw_side_margins_legacy(Ppu *ppu, int line) {
+  ppu_draw_side_margins_legacy_with_coordinates(ppu, line, NULL, NULL);
+}
+void ppu_draw_side_margins_legacy_with_coordinates(Ppu *ppu, int line,
+    PpuBgCoordinateOverride coordinates, const void *context) {
   if (PPU_mode(ppu) == 7) ppu_prepare_mode7(ppu, line);
   for (int x = -(int)ppu->extraLeftCur; x < 0; ++x)
-    ppu_render_pixel(ppu, x, line);
+    ppu_render_pixel(ppu, x, line, coordinates, context);
   for (int x = 256; x < 256 + ppu->extraRightCur; ++x)
-    ppu_render_pixel(ppu, x, line);
+    ppu_render_pixel(ppu, x, line, coordinates, context);
 }
 
-static void ppu_render_pixel(Ppu *ppu, int x, int y) {
+static void ppu_render_pixel(Ppu *ppu, int x, int y, PpuBgCoordinateOverride coordinates, const void *context) {
   int r = 0, r2 = 0;
   int g = 0, g2 = 0;
   int b = 0, b2 = 0;
   if (!PPU_forcedBlank(ppu)) {
-    int mainLayer = ppu_resolve_pixel(ppu, x, y, false, &r, &g, &b);
+    int mainLayer = ppu_resolve_pixel(ppu, x, y, false, &r, &g, &b, coordinates, context);
     bool colorWindowState = ppu_window_contains(ppu, 5, x);
     if (
       PPU_clipMode(ppu) == 3 ||
@@ -107,7 +111,7 @@ static void ppu_render_pixel(Ppu *ppu, int x, int y) {
       (PPU_preventMathMode(ppu) == 1 && !colorWindowState)
       );
     if ((mathEnabled && PPU_addSubscreen(ppu)) || PPU_pseudoHires(ppu) || PPU_mode(ppu) == 5 || PPU_mode(ppu) == 6) {
-      secondLayer = ppu_resolve_pixel(ppu, x, y, true, &r2, &g2, &b2);
+      secondLayer = ppu_resolve_pixel(ppu, x, y, true, &r2, &g2, &b2, coordinates, context);
     }
     // TODO: subscreen pixels can be clipped to black as well
     // TODO: math for subscreen pixels (add/sub sub to main)
@@ -146,7 +150,7 @@ static void ppu_render_pixel(Ppu *ppu, int x, int y) {
 }
 
 static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
-                             int *r, int *g, int *b) {
+                             int *r, int *g, int *b, PpuBgCoordinateOverride coordinates, const void *context) {
   // figure out which color is on this location on main- or subscreen, sets it in r, g, b
   // returns which layer it is: 0-3 for bg layer, 4 or 6 for sprites (depending on palette), 5 for backdrop
   int actMode = PPU_mode(ppu) == 1 && PPU_bg3priority(ppu) ? 8 : PPU_mode(ppu);
@@ -186,6 +190,7 @@ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
           if (PPU_mode(ppu) == 2 || PPU_mode(ppu) == 4 || PPU_mode(ppu) == 6) {
             ppu_apply_offset_per_tile(ppu, curLayer, &lx, &ly);
           }
+          if (coordinates) coordinates(ppu, curLayer, x, y, &lx, &ly, context);
           pixel = ppu_sample_bg(
             ppu, lx & 0x3ff, ly & 0x3ff,
             curLayer, curPriority

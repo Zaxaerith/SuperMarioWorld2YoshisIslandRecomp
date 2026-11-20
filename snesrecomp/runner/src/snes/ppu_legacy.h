@@ -12,3 +12,6 @@
  */
 void ppu_draw_whole_line_legacy(Ppu *ppu, int line);
 void ppu_draw_side_margins_legacy(Ppu *ppu, int line);
+
+void ppu_draw_side_margins_legacy_with_coordinates(Ppu *ppu, int line,
+    PpuBgCoordinateOverride coordinates, const void *context);

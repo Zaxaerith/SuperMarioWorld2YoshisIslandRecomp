@@ -2647,10 +2647,14 @@ static bool PpuWidescreenOamLeftHintAllows(Ppu *ppu, uint8_t index, int x,
 }
 
 void PpuRenderDetachedLegacyLine(Ppu *ppu, unsigned line) {
+  PpuRenderDetachedLegacyLineWithCoordinates(ppu, line, NULL, NULL);
+}
+void PpuRenderDetachedLegacyLineWithCoordinates(Ppu *ppu, unsigned line,
+    PpuBgCoordinateOverride coordinates, const void *context) {
   if (!line || line > 224 || !ppu->renderBuffer) return;
   ClearBackdrop(ppu, &ppu->objBuffer);
   ppu->lineHasSprites = !PPU_forcedBlank(ppu) && ppu_evaluateSprites(ppu, line - 1);
-  ppu_draw_side_margins_legacy(ppu, (int)line);
+  ppu_draw_side_margins_legacy_with_coordinates(ppu, (int)line, coordinates, context);
 }
 
 

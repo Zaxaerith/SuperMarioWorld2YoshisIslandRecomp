@@ -1004,6 +1004,9 @@ int main(int argc, char **argv) {
       (vsync_requested ? SDL_RENDERER_PRESENTVSYNC : 0));
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) Die("SDL_CreateRenderer failed");
+  SDL_RendererInfo renderer_info={0};
+  SDL_GetRendererInfo(renderer,&renderer_info);
+  printf("[Video] SDL renderer: %s (flags=%u)\n",renderer_info.name?renderer_info.name:"unknown",renderer_info.flags);
 #if SDL_VERSION_ATLEAST(2,0,18)
   int vsync_result = SDL_RenderSetVSync(renderer, vsync_requested ? 1 : 0);
 #else
@@ -1137,7 +1140,7 @@ int main(int argc, char **argv) {
       }
       snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
       FILE* info=fopen(info_path,"wb");
-      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,YiEffectName(g_video_effect));fclose(info);}
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nrenderer=%s\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,renderer_info.name?renderer_info.name:"unknown",YiEffectName(g_video_effect));fclose(info);}
       printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
       YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
       capture_requested = false;

@@ -856,6 +856,38 @@ static int test_ws_detached_composition(void) {
     TEST_ASSERT(mode2_center&&mode2_unchanged&&!memcmp(ram_before,g_ram,sizeof(ram_before))&&
       !memcmp(sram_before,sram,sizeof(sram_before))&&!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
       "Mode-2 rendering preserves original picture and guest state");
+    /* Distinct source rows expose wrongly repeated OPT columns. A platform
+     * crosses the left edge; another is wholly in the added right columns. */
+    static Ppu moving_before;
+    moving_before=*g_ppu;
+    memcpy(sram_before,sram,sizeof(sram_before));
+    sram[0x1ca]=1;memset(sram+0x1f72,0,80);memset(sram+0x449e,0,120);
+    const uint8_t moving_rects[]={15,16,3,3,32,0,32,16,3,3,224,0};
+    memcpy(sram+0x449e,moving_rects,sizeof(moving_rects));
+    for(unsigned i=0;i<256;++i)fixture_word(g_snes->cart->rom+0x42c18+i*2,8);
+    g_ppu->vScroll[0]=257;
+    for(unsigned col=0;col<32;++col)g_ppu->vram[0x7420+col]=0x2000|(col<5?257:256);
+    for(unsigned row=0;row<8;++row)g_ppu->vram[16+row]=(row&1)?0xff00:0x00ff;
+    g_ppu->cgram[1]=0x03e0;g_ppu->cgram[2]=0x7c00;
+    static uint8_t moving_guest_before[0x10000];
+    memcpy(moving_guest_before,sram,sizeof(moving_guest_before));
+    bool moving_ppu_unchanged=true;
+    for(unsigned line=1;line<=224;++line){
+      g_ppu->inidisp=15;ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
+      if(memcmp(&before,g_ppu,sizeof(before)))moving_ppu_unchanged=false;
+    }
+    const uint8_t *moving_left=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA-25)*4;
+    const uint8_t *moving_join=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA-1)*4;
+    const uint8_t *moving_right=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA+270)*4;
+    TEST_ASSERT(YiWs11Active() && moving_left[1]==255 && moving_join[0]==255 && moving_right[0]==255,
+        "moving rectangles keep independent vertical phases in both added sides, including negative columns");
+    bool moving_center=true;
+    for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))moving_center=false;
+    TEST_ASSERT(moving_center && moving_ppu_unchanged &&
+        !memcmp(moving_guest_before,sram,sizeof(moving_guest_before)) &&
+        !memcmp(ram_before,g_ram,sizeof(ram_before)) && !memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
+        "moving rectangle reconstruction preserves every native pixel and all guest state");
+    *g_ppu=moving_before;memcpy(sram,sram_before,sizeof(sram_before));
     /* A moving column can cross the final Map16 row before the native
      * blank band. Hardware tilemap addressing wraps; scenery must not blink. */
     fixture_word(g_ram+0x3b,1804);g_ppu->vScroll[0]=780;

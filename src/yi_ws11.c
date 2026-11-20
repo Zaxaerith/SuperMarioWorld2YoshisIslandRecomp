@@ -366,6 +366,66 @@ static unsigned map_address(const Ppu *p, int x, int y) {
   return address & 0x7fff;
 }
 
+/* The native OPT table only describes the 256-column screen. Extending its
+ * ring entries repeats unrelated moving columns at the sides; negative X
+ * columns do not use OPT at all. Reconstruct only the detached BG1 coordinates
+ * from the same moving rectangles and sine phase, after matching all native
+ * columns. No guest table, movement, camera or activation is changed. */
+static bool moving_columns_valid;
+static uint8_t moving_rectangles[20*6];
+static int moving_sine, moving_camera_x, moving_camera_y;
+static int16_t moving_offsets[YI_WS_WIDTH];
+static int moving_displacement(int world_x,int sine) {
+  int offset=0, tile_x=world_x>>4, tile_y=moving_camera_y>>4;
+  for(unsigned i=0;i<20;++i) {
+    const uint8_t *r=moving_rectangles+i*6;
+    if(tile_x>=r[0] && tile_x<=r[0]+r[2] &&
+        tile_y>=r[1]-11 && tile_y<=r[1]+r[3])
+      offset=((int8_t)r[4]*sine)>>8;
+  }
+  return offset;
+}
+static void prepare_moving_columns(const Ppu *p) {
+  moving_columns_valid=false;
+  const Cart *cart=g_snes->cart;
+  if(PPU_mode(p)!=2 || cart->ram[0x1ca]!=1 || cart->romSize<0x42e18)return;
+  /* Wavy-lava rectangles use a different formula; retain their native path. */
+  for(unsigned i=0;i<20;++i) {
+    const uint8_t *r=cart->ram+0x1f72+i*4;
+    if(r[0] || r[1] || r[2])return;
+  }
+  memcpy(moving_rectangles,cart->ram+0x449e,sizeof(moving_rectangles));
+  moving_camera_x=rd16(g_ram+0x39);moving_camera_y=rd16(g_ram+0x3b);
+  unsigned timer=rd16(g_ram+0xcfd);
+  /* CPU timer, GSU geometry and displayed VRAM are buffered separately.
+   * Accept a recent phase only if every native column agrees. */
+  for(unsigned phase=0;phase<8;++phase) {
+    int sine=(int16_t)rd16(cart->rom+0x42c18+((timer+phase*2)&0x1fe));
+    bool matches=true;
+    for(int x=0;x<256;x+=8) {
+      int lx,ly;PpuLegacyBgCoordinates(p,0,x,32,&lx,&ly);
+      int world_x=(moving_camera_x&~7)+((p->hScroll[0]&7)+x);
+      if(lx!=p->hScroll[0]+x || ((ly-(32+moving_camera_y+moving_displacement(world_x,sine)))&1023)) {
+        matches=false;break;
+      }
+    }
+    if(matches){
+      moving_sine=sine;moving_columns_valid=true;
+      for(int x=-YI_WS_EXTRA;x<256+YI_WS_EXTRA;++x)
+        moving_offsets[x+YI_WS_EXTRA]=(int16_t)moving_displacement(moving_camera_x+x,sine);
+      break;
+    }
+  }
+}
+static void landscape_coordinates(const Ppu *p,int layer,int x,int line,
+    int *lx,int *ly,const void *context) {
+  (void)context;
+  if(moving_columns_valid && PPU_mode(p)==2 && layer==0 && (x<0 || x>=256)) {
+    *lx=p->hScroll[0]+x;
+    *ly=line+(moving_camera_y&1023)+moving_offsets[x+YI_WS_EXTRA];
+  }
+}
+
 static int render_world_y(const Ppu *p,int y) {
   /* Mode 2 offset columns wrap through the 11-bit world-grid address.
    * Do not reject the complete frame when a moving column crosses row 2048. */
@@ -381,6 +441,7 @@ static bool fill_world_span(Ppu *out, const uint8_t *ram, const uint8_t *gsu,
     uint16_t tile;
     int lx, ly;
     PpuLegacyBgCoordinates(out, 0, x, line, &lx, &ly);
+    landscape_coordinates(out,0,x,line,&lx,&ly,NULL);
     int wx = ox + lx - out->hScroll[0];
     int world_y = render_world_y(out,wy + ly - out->vScroll[0] - line);
     if (!YiWs11WorldTile(ram, gsu, cart->rom, cart->romSize, wx, world_y, &tile)) return false;
@@ -571,6 +632,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (line == 1) {
     ++frames;
     narrow_component=analyze_room_bounds();
+    prepare_moving_columns(native);
     presentation_wide = false;
     left_pixels = right_pixels = left_width = right_width = 0;
     frame_reject = reject_mask(native); frame_tile_reason = 0;
@@ -672,7 +734,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
         /* Results use BG3 for text, not a periodic backdrop. Like pause,
          * keep their margins black even when CGRAM backdrop is non-black. */
         unsigned ui_kind=ui_scene(native);
-        if(ui_kind!=2 && ui_kind!=4) PpuRenderDetachedLegacyLine(&detached, line);
+        if(ui_kind!=2 && ui_kind!=4) PpuRenderDetachedLegacyLineWithCoordinates(&detached, line, moving_columns_valid ? landscape_coordinates : NULL, NULL);
         const uint8_t *row = pixels + (line - 1) * YI_WS_WIDTH * 4;
         for (unsigned x = 0; x < YI_WS_EXTRA; ++x) {
           if (row[x*4] || row[x*4+1] || row[x*4+2]) ++left_pixels;

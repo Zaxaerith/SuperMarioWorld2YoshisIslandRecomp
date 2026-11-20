@@ -607,7 +607,11 @@ void PpuSetWidescreenLineEnhancer(Ppu *ppu,
 /* Host-owned detached copy only. Evaluates OBJ and the existing legacy
  * compositor in the side margins only, without advancing the beam, guest
  * state, or native PPU. Caller copies the native center separately. */
+typedef void (*PpuBgCoordinateOverride)(const Ppu *ppu, int layer, int x,
+    int line, int *lx, int *ly, const void *context);
 void PpuRenderDetachedLegacyLine(Ppu *detached, unsigned line);
+void PpuRenderDetachedLegacyLineWithCoordinates(Ppu *detached, unsigned line,
+    PpuBgCoordinateOverride coordinates, const void *context);
 /* Full private row, for additional vertical picture bands only. */
 
 // Renderer-neutral host-overlay extraction (opt-in; see
