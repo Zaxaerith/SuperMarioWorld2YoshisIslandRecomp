@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "yi_video_effects.h"
+#include "yi_pause_menu.h"
 #include "yi_effect_diagnostics.h"
 #include <string.h>
 
@@ -1047,6 +1048,8 @@ int main(int argc, char **argv) {
 
   bool capture_requested = false;
   bool running = true;
+  YiPauseMenu pause_menu={0};
+  bool menu_audio_paused=false;
   SDL_Event event;
 
   const uint64_t perf_freq = SDL_GetPerformanceFrequency();
@@ -1057,9 +1060,11 @@ int main(int argc, char **argv) {
 
   while (running) {
     while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        running = false;
-      } else if (event.type == SDL_KEYDOWN) {
+      if(YiPauseMenuEvent(&pause_menu,renderer,&event)) {
+        if(pause_menu.quit)running=false;
+        continue;
+      }
+      if (event.type == SDL_KEYDOWN) {
 #ifdef RECOMP_LAUNCHER
         if (YiEffectKeyDown(&g_video_effect,g_effect_hotkey,event.key.keysym.sym,
             event.key.repeat != 0,(event.key.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) != 0)) {
@@ -1067,9 +1072,7 @@ int main(int argc, char **argv) {
           continue;
         }
 #endif
-        if (event.key.keysym.sym == SDLK_ESCAPE) {
-          running = false;
-        } else if(event.key.keysym.sym==SDLK_F9 && !event.key.repeat) {
+        if(event.key.keysym.sym==SDLK_F9 && !event.key.repeat) {
           capture_requested=true;
         } else if (event.key.keysym.sym == SDLK_F11 ||
                    (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))) {
@@ -1093,12 +1096,21 @@ int main(int argc, char **argv) {
       }
     }
 
+    if(!running)break;
+    if(menu_audio_paused!=pause_menu.open) {
+      menu_audio_paused=pause_menu.open;
+      if(audio_dev)SDL_PauseAudioDevice(audio_dev,menu_audio_paused?1:0);
+      if(!menu_audio_paused)next_frame_time=SDL_GetPerformanceCounter();
+    }
     const uint8_t *key_states = SDL_GetKeyboardState(NULL);
-    update_keyboard(key_states);
+    if(YiPauseMenuBlocksInput(&pause_menu,key_states,s_controller))s_pad_state=0;
+    else update_keyboard(key_states);
 
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
-    RtlRunFrame(s_pad_state);
-    GameDrawPpuFrame();
+    if(!pause_menu.open) {
+      RtlRunFrame(s_pad_state);
+      GameDrawPpuFrame();
+    }
 
     /* Present active viewport */
     SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
@@ -1115,17 +1127,20 @@ int main(int argc, char **argv) {
       YiEffectsCapture(renderer,fb_pixels,256,224,256*4,SDL_GetPerformanceCounter(),(int)g_video_effect);
       capture_requested=false;
     }
+    YiPauseMenuDraw(&pause_menu,renderer);
     SDL_RenderPresent(renderer);
     YiEffectsRecord(g_video_effect,256,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
-    if (++s_frame_save_counter % 300 == 0) {
+    if (!pause_menu.open && ++s_frame_save_counter % 300 == 0) {
 #ifdef RECOMP_LAUNCHER
       save_sram(g_active_sram_path);
 #else
       save_sram("save.srm");
 #endif
     }
+
+    if(pause_menu.open){SDL_Delay(16);continue;}
 
     /* Pace frames for the selected ROM region. */
     next_frame_time += (uint64_t)target_frame_cycles;
