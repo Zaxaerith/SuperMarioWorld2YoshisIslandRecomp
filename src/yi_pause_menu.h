@@ -20,9 +20,9 @@ static void YiPauseMenuLayout(SDL_Renderer *r,SDL_Rect *panel,SDL_Rect buttons[2
   int w,h;SDL_RenderGetLogicalSize(r,&w,&h);
   if(w<=0 || h<=0)SDL_GetRendererOutputSize(r,&w,&h);
   int u=SDL_min(w/300,h/224);if(u<1)u=1;*unit=u;
-  int pw=SDL_min(248*u,w-16*u),ph=158*u;
+  int pw=SDL_min(124*u,w-8*u),ph=79*u;
   *panel=(SDL_Rect){(w-pw)/2,(h-ph)/2,pw,ph};
-  for(int i=0;i<2;++i)buttons[i]=(SDL_Rect){panel->x+16*u,panel->y+(55+42*i)*u,pw-32*u,34*u};
+  for(int i=0;i<2;++i)buttons[i]=(SDL_Rect){panel->x+8*u,panel->y+(27+21*i)*u,pw-16*u,17*u};
 }
 static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) {
   if(e->type==SDL_QUIT){YiPauseMenuOpen(m,true);return true;}
@@ -107,19 +107,19 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
   SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);SDL_SetRenderDrawColor(r,0,0,0,150);SDL_RenderFillRect(r,NULL);
   SDL_Rect panel,buttons[2];int u;YiPauseMenuLayout(r,&panel,buttons,&u);
   SDL_SetRenderDrawColor(r,105,68,34,255);SDL_RenderFillRect(r,&panel);
-  SDL_Rect inside={panel.x+4*u,panel.y+4*u,panel.w-8*u,panel.h-8*u};
+  SDL_Rect inside={panel.x+2*u,panel.y+2*u,panel.w-4*u,panel.h-4*u};
   SDL_SetRenderDrawColor(r,18,62,45,255);SDL_RenderFillRect(r,&inside);
   SDL_SetRenderDrawColor(r,245,243,209,255);
-  YiPauseMenuText(r,m->confirm?"SPIEL BEENDEN?":"PAUSE",panel.x+panel.w/2,panel.y+16*u,(m->confirm?2:3)*u);
+  YiPauseMenuText(r,m->confirm?"SPIEL BEENDEN?":"PAUSE",panel.x+panel.w/2,panel.y+8*u,m->confirm?u:SDL_max(1,3*u/2));
   for(int i=0;i<2;++i) {
     SDL_SetRenderDrawColor(r,i==m->selected?59:23,i==m->selected?108:73,i==m->selected?65:50,255);
     SDL_RenderFillRect(r,&buttons[i]);
     SDL_SetRenderDrawColor(r,i==m->selected?255:100,i==m->selected?220:128,i==m->selected?115:100,255);
     SDL_RenderDrawRect(r,&buttons[i]);SDL_SetRenderDrawColor(r,255,255,235,255);
-    YiPauseMenuText(r,i?"BEENDEN":m->confirm?"ABBRECHEN":"FORTSETZEN",panel.x+panel.w/2,buttons[i].y+10*u,2*u);
+    YiPauseMenuText(r,i?"BEENDEN":m->confirm?"ABBRECHEN":"FORTSETZEN",panel.x+panel.w/2,buttons[i].y+5*u,u);
   }
   SDL_SetRenderDrawColor(r,185,204,179,255);
-  YiPauseMenuText(r,m->confirm?"ESC: ABBRECHEN":"ESC: FORTSETZEN",panel.x+panel.w/2,panel.y+141*u,u);
+  YiPauseMenuText(r,m->confirm?"ESC: ABBRECHEN":"ESC: FORTSETZEN",panel.x+panel.w/2,panel.y+70*u,SDL_max(1,u/2));
   SDL_SetRenderDrawBlendMode(r,blend);SDL_SetRenderDrawColor(r,red,green,blue,alpha);
 }
 #endif
