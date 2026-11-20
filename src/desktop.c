@@ -5,6 +5,10 @@
  * Real-time SDL2 interactive host: PAL/NTSC gameplay, authentic PPU/APU, SuperFX GSU,
  * native recomp-ui launcher GUI, single-player controller mapping and SRAM saves.
  */
+#ifdef YI_LOCAL_ACHIEVEMENTS
+#include "achievements/yi_achievements.h"
+#define SDL_RenderPresent YiAchievementsPresent
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -657,6 +661,11 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
   snesrecomp_exe_dir_path("config.ini", g_config_path, sizeof(g_config_path));
   snesrecomp_exe_dir_path("keybinds.ini", g_keybinds_path, sizeof(g_keybinds_path));
 
+#ifdef YI_LOCAL_ACHIEVEMENTS
+  char achievements_preferences[1024];
+  snesrecomp_exe_dir_path("achievements.ini",achievements_preferences,sizeof(achievements_preferences));
+  YiAchievementsInit(achievements_preferences);
+#endif
   load_launcher_settings(settings, g_config_path);
   int effect_value = 0;
   if (ini_read_int(g_config_path,"Mods","VideoEffect",&effect_value) &&
@@ -1024,6 +1033,9 @@ int main(int argc, char **argv) {
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
+#ifdef YI_LOCAL_ACHIEVEMENTS
+  YiAchievementsStart(s_rom_profile,g_active_sram_path,g_ram,g_snes->cart->ram,g_snes->cart->ramSize);
+#endif
   int audio_rate = 44100;
 #ifdef RECOMP_LAUNCHER
   if (g_settings.audio_freq >= 8000 && g_settings.audio_freq <= 96000)
@@ -1068,6 +1080,12 @@ int main(int argc, char **argv) {
 
   while (running) {
     while (SDL_PollEvent(&event)) {
+#ifdef YI_LOCAL_ACHIEVEMENTS
+      if(event.type==SDL_KEYDOWN && !event.key.repeat) {
+        if(event.key.keysym.sym==SDLK_F6) {YiAchievementsOverview(0);continue;}
+        if(event.key.keysym.sym==SDLK_F10) {YiAchievementsOverview((event.key.keysym.mod&KMOD_SHIFT)?-1:1);continue;}
+      }
+#endif
       if (event.type == SDL_QUIT) {
         running = false;
       } else if (event.type == SDL_KEYDOWN) {
@@ -1112,6 +1130,9 @@ int main(int argc, char **argv) {
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
     uint64_t emulation_start=SDL_GetPerformanceCounter();
     RtlRunFrame(s_pad_state);
+#ifdef YI_LOCAL_ACHIEVEMENTS
+    YiAchievementsFrame();
+#endif
     GameDrawPpuFrame();
     uint64_t emulation_end=SDL_GetPerformanceCounter();
 
@@ -1211,6 +1232,9 @@ int main(int argc, char **argv) {
   }
   YiPresentTraceDestroy();
   YiPresentationDestroy(&presentation);
+#ifdef YI_LOCAL_ACHIEVEMENTS
+  YiAchievementsShutdown();
+#endif
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
   SDL_Quit();

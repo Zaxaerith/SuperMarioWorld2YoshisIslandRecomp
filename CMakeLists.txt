@@ -127,6 +127,12 @@ if(YI_BUILD_PLAY)
 endif()
 
 
+# Optional local achievement evaluation; launcher opt-in defaults to disabled.
+option(YI_LOCAL_ACHIEVEMENTS "Build offline local achievements (Windows)" ${WIN32})
+if(YI_LOCAL_ACHIEVEMENTS)
+  include(cmake/LocalAchievements.cmake)
+endif()
+
 # Headless Diagnostic Target (yi_headless)
 if(YI_BUILD_HEADLESS)
   add_executable(yi_headless src/headless.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
