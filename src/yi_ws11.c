@@ -376,7 +376,7 @@ static unsigned map_address(const Ppu *p, int x, int y) {
  * columns do not use OPT at all. Reconstruct only the detached BG1 coordinates
  * from the same moving rectangles and sine phase, after matching all native
  * columns. No guest table, movement, camera or activation is changed. */
-static bool moving_columns_valid;
+static bool moving_columns_valid, moving_scanout_ready;
 static uint8_t moving_rectangles[20*6];
 static int moving_sine, moving_camera_x, moving_camera_y;
 static int16_t moving_offsets[YI_WS_WIDTH];
@@ -400,7 +400,10 @@ static void prepare_moving_columns(const Ppu *p) {
     if(r[0] || r[1] || r[2])return;
   }
   memcpy(moving_rectangles,cart->ram+0x449e,sizeof(moving_rectangles));
-  moving_camera_x=rd16(g_ram+0x39);moving_camera_y=rd16(g_ram+0x3b);
+  /* CPU camera state can already be ahead of the displayed scroll. Use
+   * the same live PPU world origin as the landscape decoder. */
+  moving_camera_x=world_origin(rd16(g_ram+0x39),p->hScroll[0],PPU_bgTilemapWider(p,0)?511:255);
+  moving_camera_y=rd16(g_ram+0x3b);
   unsigned timer=rd16(g_ram+0xcfd);
   /* CPU timer, GSU geometry and displayed VRAM are buffered separately.
    * Accept a recent phase only if every native column agrees. */
@@ -411,7 +414,7 @@ static void prepare_moving_columns(const Ppu *p) {
      * scroll can differ from the per-column table without invalidating it. */
     for(int x=8;x<256;x+=8) {
       int lx,ly;PpuLegacyBgCoordinates(p,0,x,32,&lx,&ly);
-      int world_x=(moving_camera_x&~7)+((p->hScroll[0]&7)+x);
+      int world_x=moving_camera_x+x;
       if(((lx-p->hScroll[0]-x)&1023) || ((ly-(32+moving_camera_y+moving_displacement(world_x,sine)))&1023)) {
         matches=false;break;
       }
@@ -639,7 +642,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (line == 1) {
     ++frames;
     narrow_component=analyze_room_bounds();
-    prepare_moving_columns(native);
+    moving_columns_valid=moving_scanout_ready=false;
     presentation_wide = false;
     left_pixels = right_pixels = left_width = right_width = 0;
     frame_reject = reject_mask(native); frame_tile_reason = 0;
@@ -677,6 +680,9 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
     diagnostic_valid = true;
   }
   if (active && !blank_band_line) {
+    /* Initial blank scanlines may precede the displayed scroll/HDMA state.
+     * Freeze column motion at the first visible line, not the blank border. */
+    if(!moving_scanout_ready){prepare_moving_columns(native);moving_scanout_ready=true;}
     const Cart *cart = g_snes->cart;
     int ox = world_origin(rd16(g_ram + 0x39), native->hScroll[0], PPU_bgTilemapWider(native, 0) ? 511 : 255);
     int oy = world_origin(rd16(g_ram + 0x3b), native->vScroll[0], PPU_bgTilemapHigher(native, 0) ? 511 : 255);

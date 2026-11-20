@@ -888,7 +888,7 @@ static int test_ws_detached_composition(void) {
     memcpy(sram_before,sram,sizeof(sram_before));
     sram[0x1ca]=1;memset(sram+0x1f72,0,80);memset(sram+0x449e,0,120);
     for(unsigned high=0;high<=1024;high+=1024) {
-    fixture_word(g_ram+0x39,257+high);g_ppu->hScroll[0]=257+high;
+    fixture_word(g_ram+0x39,260+high);g_ppu->hScroll[0]=249+high;
     uint8_t moving_rects[]={15,16,3,3,32,0,32,16,3,3,224,0};
     moving_rects[0]+=high>>4;moving_rects[6]+=high>>4;
     memcpy(sram+0x449e,moving_rects,sizeof(moving_rects));
@@ -903,14 +903,16 @@ static int test_ws_detached_composition(void) {
     memcpy(moving_guest_before,sram,sizeof(moving_guest_before));
     bool moving_ppu_unchanged=true;
     for(unsigned line=1;line<=224;++line){
-      g_ppu->inidisp=15;ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
+      g_ppu->inidisp=line<=8?0x8f:15;
+      if(line==9)g_ppu->hScroll[0]=257+high;
+      ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
       if(memcmp(&before,g_ppu,sizeof(before)))moving_ppu_unchanged=false;
     }
-    const uint8_t *moving_left=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA-25)*4;
+    const uint8_t *moving_left=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA-18)*4;
     const uint8_t *moving_join=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA-1)*4;
     const uint8_t *moving_right=wide+((32-1)*YI_WS_WIDTH+YI_WS_EXTRA+270)*4;
     TEST_ASSERT(YiWs11Active() && moving_left[1]==255 && moving_join[0]==255 && moving_right[0]==255,
-        "moving rectangles keep independent vertical phases in both added sides, including negative columns");
+        "moving rectangles keep independent vertical phases in both added sides, including delayed visible scroll and a CPU camera three pixels ahead");
     bool moving_center=true;
     for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))moving_center=false;
     TEST_ASSERT(moving_center && moving_ppu_unchanged &&
