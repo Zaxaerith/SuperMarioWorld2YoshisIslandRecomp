@@ -26,7 +26,7 @@ typedef struct WsFrameDiagnostic {
   unsigned frame, mode, pause, stage, camera_x, camera_y;
   unsigned ppu_first, ppu_last, main_first, main_last, ui_first, ui_last;
   unsigned gate, tile_cause, failed_line, scenery, wide, cleared;
-  unsigned brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us;
+  unsigned brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us,moving_columns;
 } WsFrameDiagnostic;
 static WsFrameDiagnostic frame_diagnostic, diagnostic_history[180];
 static unsigned history_next, history_count;
@@ -402,10 +402,12 @@ static void prepare_moving_columns(const Ppu *p) {
   for(unsigned phase=0;phase<8;++phase) {
     int sine=(int16_t)rd16(cart->rom+0x42c18+((timer+phase*2)&0x1fe));
     bool matches=true;
-    for(int x=0;x<256;x+=8) {
+    /* The first native fetch column deliberately bypasses OPT. Its global
+     * scroll can differ from the per-column table without invalidating it. */
+    for(int x=8;x<256;x+=8) {
       int lx,ly;PpuLegacyBgCoordinates(p,0,x,32,&lx,&ly);
       int world_x=(moving_camera_x&~7)+((p->hScroll[0]&7)+x);
-      if(lx!=p->hScroll[0]+x || ((ly-(32+moving_camera_y+moving_displacement(world_x,sine)))&1023)) {
+      if(((lx-p->hScroll[0]-x)&1023) || ((ly-(32+moving_camera_y+moving_displacement(world_x,sine)))&1023)) {
         matches=false;break;
       }
     }
@@ -775,6 +777,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
     frame_diagnostic.ui_last=ui_scene(native);frame_diagnostic.gate=frame_reject;
     frame_diagnostic.tile_cause=frame_tile_reason;frame_diagnostic.wide=YiWs11PresentationWide();
     frame_diagnostic.brightness_last=native->inidisp;frame_diagnostic.oam_match=selected!=NULL;
+    frame_diagnostic.moving_columns=moving_columns_valid;
     WsHistoryImage *image=&history_images[history_next%180];unsigned luma=0;
     for(unsigned y=0;y<224;++y)
       if(memcmp(native->renderBuffer+y*native->renderPitch,pixels+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))++frame_diagnostic.center_changed_lines;
@@ -856,12 +859,12 @@ void YiWs11CaptureTerrain(const char *path) {
   else snprintf(history_path,sizeof(history_path),"%s-history.csv",path);
   FILE *history=fopen(history_path,"wb");
   if(history) {
-    fprintf(history,"frame,mode,pause,stage,camera_x,camera_y,ppu_first,ppu_last,main_first,main_last,ui_first,ui_last,gate,tile_cause,failed_line,scenery,wide,cleared,brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us\n");
+    fprintf(history,"frame,mode,pause,stage,camera_x,camera_y,ppu_first,ppu_last,main_first,main_last,ui_first,ui_last,gate,tile_cause,failed_line,scenery,wide,cleared,brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us,moving_columns\n");
     for(unsigned i=0;i<history_count;++i) {
       const WsFrameDiagnostic *d=&diagnostic_history[(history_next-history_count+i)%180];
-      fprintf(history,"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+      fprintf(history,"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
           d->frame,d->mode,d->pause,d->stage,d->camera_x,d->camera_y,d->ppu_first,d->ppu_last,
-          d->main_first,d->main_last,d->ui_first,d->ui_last,d->gate,d->tile_cause,d->failed_line,d->scenery,d->wide,d->cleared,d->brightness_first,d->brightness_last,d->oam_match,d->native_luma,d->center_changed_lines,d->emu_us,d->draw_us);
+          d->main_first,d->main_last,d->ui_first,d->ui_last,d->gate,d->tile_cause,d->failed_line,d->scenery,d->wide,d->cleared,d->brightness_first,d->brightness_last,d->oam_match,d->native_luma,d->center_changed_lines,d->emu_us,d->draw_us,d->moving_columns);
     }
     fclose(history);
   }

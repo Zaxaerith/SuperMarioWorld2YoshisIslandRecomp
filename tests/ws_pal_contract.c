@@ -862,14 +862,19 @@ static int test_ws_detached_composition(void) {
     moving_before=*g_ppu;
     memcpy(sram_before,sram,sizeof(sram_before));
     sram[0x1ca]=1;memset(sram+0x1f72,0,80);memset(sram+0x449e,0,120);
-    const uint8_t moving_rects[]={15,16,3,3,32,0,32,16,3,3,224,0};
+    for(unsigned high=0;high<=1024;high+=1024) {
+    fixture_word(g_ram+0x39,257+high);g_ppu->hScroll[0]=257+high;
+    uint8_t moving_rects[]={15,16,3,3,32,0,32,16,3,3,224,0};
+    moving_rects[0]+=high>>4;moving_rects[6]+=high>>4;
     memcpy(sram+0x449e,moving_rects,sizeof(moving_rects));
     for(unsigned i=0;i<256;++i)fixture_word(g_snes->cart->rom+0x42c18+i*2,8);
-    g_ppu->vScroll[0]=257;
+    g_ppu->vScroll[0]=256; /* First native column has no per-tile offset. */
     for(unsigned col=0;col<32;++col)g_ppu->vram[0x7420+col]=0x2000|(col<5?257:256);
     for(unsigned row=0;row<8;++row)g_ppu->vram[16+row]=(row&1)?0xff00:0x00ff;
     g_ppu->cgram[1]=0x03e0;g_ppu->cgram[2]=0x7c00;
     static uint8_t moving_guest_before[0x10000];
+    static uint8_t moving_wram_before[0x20000];
+    memcpy(moving_wram_before,g_ram,sizeof(moving_wram_before));
     memcpy(moving_guest_before,sram,sizeof(moving_guest_before));
     bool moving_ppu_unchanged=true;
     for(unsigned line=1;line<=224;++line){
@@ -885,8 +890,10 @@ static int test_ws_detached_composition(void) {
     for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))moving_center=false;
     TEST_ASSERT(moving_center && moving_ppu_unchanged &&
         !memcmp(moving_guest_before,sram,sizeof(moving_guest_before)) &&
-        !memcmp(ram_before,g_ram,sizeof(ram_before)) && !memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
+        !memcmp(moving_wram_before,g_ram,sizeof(moving_wram_before)) && !memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
         "moving rectangle reconstruction preserves every native pixel and all guest state");
+    }
+    fixture_word(g_ram+0x39,257);
     *g_ppu=moving_before;memcpy(sram,sram_before,sizeof(sram_before));
     /* A moving column can cross the final Map16 row before the native
      * blank band. Hardware tilemap addressing wraps; scenery must not blink. */
