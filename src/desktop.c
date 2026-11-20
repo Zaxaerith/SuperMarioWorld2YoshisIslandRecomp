@@ -1,3 +1,5 @@
+#include "yi_capture.h"
+#include "yi_present_trace.h"
 /*
  * Super Mario World 2: Yoshi's Island (SNESRecomp Native AOT Desktop Player)
  * Real-time SDL2 interactive host: PAL/NTSC gameplay, authentic PPU/APU, SuperFX GSU,
@@ -10,12 +12,14 @@
 #include "yi_video_effects.h"
 #include "yi_save_indicator.h"
 #include "yi_effect_diagnostics.h"
+#include "yi_presentation.h"
 #include <string.h>
 
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
 #include "game_rtl.h"
+#include "yi_ws11.h"
 #include "common_rtl.h"
 #include "cpu_state.h"
 #include "snes/snes.h"
@@ -93,6 +97,12 @@ int YiEffectsLauncherSetHotkey(const char *name) {
   return 1;
 }
 
+static bool g_widescreen;
+int YiWsLauncherEnabled(void) { return g_widescreen; }
+void YiWsLauncherSetEnabled(int enabled) {
+  g_widescreen = enabled != 0;
+  launcher_ini_kv_write(g_config_path, "Mods", "Widescreen", g_widescreen ? "1" : "0");
+}
 static char g_keybinds_path[1024] = "keybinds.ini";
 static char g_active_sram_path[1024] = "saves/save.srm";
 #endif
@@ -662,6 +672,8 @@ static int run_launcher_flow(int argc, char **argv, const char *cli_rom_override
     YiEffectsLauncherSetHotkey(SDL_GetKeyName((SDL_Keycode)hotkey_value));
 
 
+  int ws_value = 0;
+  if (ini_read_int(g_config_path, "Mods", "Widescreen", &ws_value)) g_widescreen = ws_value != 0;
 
   bool force_launcher = false;
   const char *explicit_rom = (cli_rom_override && cli_rom_override[0]) ? cli_rom_override : NULL;
@@ -831,6 +843,11 @@ static int effects_hotkey_selftest(void) {
   return ok?0:1;
 }
 #endif
+static void capture_ws_pixels(const char *path, const void *pixels, int width, int height, int pitch) {
+  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom((void *)pixels, width, height, 32, pitch, SDL_PIXELFORMAT_BGRA32);
+  if (surface) { SDL_SaveBMP(surface, path); SDL_FreeSurface(surface); }
+}
+
 int main(int argc, char **argv) {
 #ifdef RECOMP_LAUNCHER
   if(argc==2 && !strcmp(argv[1],"--effects-selftest")) return effects_hotkey_selftest();
@@ -919,6 +936,8 @@ int main(int argc, char **argv) {
     return 2;
   }
   GameConfigureRom(s_rom_profile);
+  YiWs11Init(s_rom_profile);
+  YiWs11SetEnabled(g_widescreen);
   free(rom_data);
 
   if (!g_snes || !g_snes->cart || !g_snes->cart->superfx) {
@@ -960,6 +979,7 @@ int main(int argc, char **argv) {
 
   int win_w = (aspect == 0) ? ((256 * scale * 7 + 3) / 6) : (pres_w * scale);
   int win_h = pres_h * scale;
+  if (g_widescreen) win_w = (win_h * 16 + 8) / 9;
 
   Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
   if (fullscreen) {
@@ -995,26 +1015,17 @@ int main(int argc, char **argv) {
 #else
   int vsync_result = 0;
 #endif
-  SDL_RendererInfo renderer_info;
+  SDL_RendererInfo renderer_info={0};
   if(SDL_GetRendererInfo(renderer,&renderer_info)==0)
     printf("[Video] renderer=%s VSync requested=%s apply=%s\n",renderer_info.name,
       vsync_requested?"on":"off",vsync_result==0?"ok":SDL_GetError());
 
   SDL_RenderSetLogicalSize(renderer, pres_w, pres_h);
+  const char *present_trace=SDL_getenv("YI_PRESENT_TRACE");
+  YiPresentTraceInit(present_trace && !strcmp(present_trace,"1"));
+  if(yi_present_trace.enabled)printf("[Video] Pre-Present readback diagnostic enabled; may reduce frame rate.\n");
 
-  SDL_Texture *texture = SDL_CreateTexture(
-    renderer,
-    SDL_PIXELFORMAT_BGRA32,
-    SDL_TEXTUREACCESS_STREAMING,
-    256, 224
-  );
-  if (texture) {
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
-  }
-
-  SDL_Texture *effect_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32,
-      SDL_TEXTUREACCESS_STREAMING, 256 * 3, 224 * 3);
-  static uint8_t effect_pixels[256 * 224 * 36];
+  static YiPresentation presentation;
   static uint8_t fb_pixels[256 * 4 * 256];
   PpuBeginDrawing(g_ppu, fb_pixels, 256 * 4, 0);
 
@@ -1074,8 +1085,10 @@ int main(int argc, char **argv) {
 #endif
         if (event.key.keysym.sym == SDLK_ESCAPE) {
           running = false;
-        } else if(event.key.keysym.sym==SDLK_F9 && !event.key.repeat) {
-          capture_requested=true;
+        } else if (event.key.keysym.sym == SDLK_F9 && !event.key.repeat) {
+          capture_requested = true;
+        } else if (event.key.keysym.sym == SDLK_F8 && !event.key.repeat) {
+          YiWs11Toggle();
         } else if (event.key.keysym.sym == SDLK_F11 ||
                    (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT))) {
           static bool s_fs = false;
@@ -1102,27 +1115,50 @@ int main(int argc, char **argv) {
     update_keyboard(key_states);
 
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
+    uint64_t emulation_start=SDL_GetPerformanceCounter();
     RtlRunFrame(s_pad_state);
     GameDrawPpuFrame();
+    uint64_t emulation_end=SDL_GetPerformanceCounter();
 
     /* Present active viewport */
-    SDL_UpdateTexture(texture, NULL, fb_pixels, 256 * 4);
-    SDL_RenderClear(renderer);
-    uint64_t filter_start=SDL_GetPerformanceCounter();
-    bool filtered=effect_texture && g_video_effect && YiEffectApply(g_video_effect,fb_pixels,
-        256,224,256*4,effect_pixels,sizeof(effect_pixels));
-    uint64_t filter_ticks=SDL_GetPerformanceCounter()-filter_start;
-    if(filtered) {
-      SDL_UpdateTexture(effect_texture,NULL,effect_pixels,256*12);
-      SDL_RenderCopy(renderer,effect_texture,NULL,NULL);
-    } else SDL_RenderCopy(renderer, texture, NULL, NULL);
-    if(capture_requested) {
-      YiEffectsCapture(renderer,fb_pixels,256,224,256*4,SDL_GetPerformanceCounter(),(int)g_video_effect);
-      capture_requested=false;
+    bool wide = YiWs11PresentationWide();
+    const uint8_t* source=wide ? YiWs11Pixels() : fb_pixels;
+    unsigned source_width=wide ? YI_WS_WIDTH : 256;
+    uint64_t filter_ticks=0;
+    if(!YiPresentationDraw(&presentation,renderer,fb_pixels,YiWs11Pixels(),wide,g_video_effect,pres_w,pres_h,&filter_ticks))
+      Die("Presentation failed");
+    YiPresentTraceRecord(renderer,source,source_width,224,source_width*4,wide,g_video_effect);
+    YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
+        (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
+    if (capture_requested) {
+      char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
+      unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
+      snprintf(native_path,sizeof(native_path),"ws-%llu-native.bmp",capture_id);
+      snprintf(wide_path,sizeof(wide_path),"ws-%llu-wide.bmp",capture_id);
+      snprintf(terrain_path,sizeof(terrain_path),"ws-%llu-terrain.bin",capture_id);
+      YiWs11CaptureTerrain(terrain_path);
+      char trace_prefix[64];snprintf(trace_prefix,sizeof(trace_prefix),"ws-%llu",capture_id);
+      YiPresentTraceSave(trace_prefix);
+      capture_ws_pixels(native_path, fb_pixels, 256, 224, 256 * 4);
+      capture_ws_pixels(wide_path, YiWs11Pixels(), YI_WS_WIDTH, 224, YI_WS_WIDTH * 4);
+      snprintf(present_path,sizeof(present_path),"ws-%llu-present.bmp",capture_id);
+      SDL_Surface* capture=YiCaptureRenderer(renderer);
+      if(capture) {
+        SDL_SaveBMP(capture,present_path);
+        SDL_FreeSurface(capture);
+      }
+      snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
+      FILE* info=fopen(info_path,"wb");
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nrenderer=%s\npresent_trace=%d\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,renderer_info.name?renderer_info.name:"unknown",yi_present_trace.enabled,YiEffectName(g_video_effect));fclose(info);}
+      printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
+      YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
+      capture_requested = false;
     }
     YiSaveIndicatorDraw(&g_save_indicator,renderer,SDL_GetTicks64());
+    uint64_t present_start=SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer);
-    YiEffectsRecord(g_video_effect,256,224,filter_ticks,vsync_requested);
+    YiPresentTracePresented((unsigned)((SDL_GetPerformanceCounter()-present_start)*1000000/perf_freq));
+    YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
     if (++s_frame_save_counter % 300 == 0) {
@@ -1179,8 +1215,8 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
-  if (effect_texture) SDL_DestroyTexture(effect_texture);
-  if (texture) SDL_DestroyTexture(texture);
+  YiPresentTraceDestroy();
+  YiPresentationDestroy(&presentation);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
   SDL_Quit();
