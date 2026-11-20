@@ -9,3 +9,12 @@ Guest execution and audio pause while the overlay is open. Resume resets host fr
 The SDL overlay restores renderer colour/blend state and does not change logical aspect, filtering, game pixels, camera or enemy activation. It has no widescreen or RetroAchievements dependency.
 
 `pause_menu_contract` uses a synthetic SDL software surface, without a ROM or game execution. It checks safe defaults, repeat rejection, confirmation/cancel, release gating, keyboard/mouse/controller input and renderer-state preservation at native and wide logical sizes.
+
+## Size previews
+
+These show the actual overlay renderer over an F9 game capture, at the normal
+4:3 presentation size. They are rendered previews, not live menu screenshots.
+
+![Pause menu](evidence/pause-menu/menu-preview.png)
+
+![Quit confirmation](evidence/pause-menu/quit-preview.png)
