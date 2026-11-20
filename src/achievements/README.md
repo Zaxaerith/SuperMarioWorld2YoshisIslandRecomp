@@ -29,7 +29,7 @@ per-slot isolation, restart/duplicates, corruption/mismatches, write failures,
 locking, native-memory preservation, opt-in defaults and queued notifications.
 Synthetic checks do not establish full European gameplay compatibility.
 
-Europe Rev2 gameplay testing confirmed the first five-flower achievement, its
+USA and Europe Rev2 gameplay testing confirmed the first five-flower achievement, its
 in-game notification and persistence in game save slot 2. See
 [the verification images](../../docs/evidence/offline-achievements/README.md).
 This does not establish full-set compatibility for all European revisions.

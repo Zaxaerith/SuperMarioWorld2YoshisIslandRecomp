@@ -10,3 +10,5 @@ The following notification preview uses the actual overlay renderer over that F9
 ![Rendered notification preview](europe-rev2-notification-preview.png)
 
 This verifies one achievement on Europe Rev2. Full-set gameplay validation and the other European revisions remain outstanding.
+
+The contributor also confirmed the same first five-flower achievement on USA, including persistence in game save slot 2.
