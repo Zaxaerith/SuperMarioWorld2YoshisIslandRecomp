@@ -1,123 +1,36 @@
-# Experimental widescreen: review evidence and remaining checks
+# Experimental widescreen: fixes and validation
 
-19 November 2026. Main 7396f58 includes audio #4, VSync #8 and display filters #6. Widescreen remains
-**off by default and experimental**. Special-scene and broader PAL validation remain incomplete.
-Camera and enemy activation remain native.
+Widescreen is opt-in and **off by default**. The contributor reports **no visible issues through USA stage 2-8 inclusive** after these fixes. This is a gameplay report, not full-game or all-region certification.
 
-## Evidence now available
+## Latest fixes
 
-The contributor reports USA progress through **1-8**. This is not a full-game validation.
-Current audited groups:38 USA +13 Europe Rev2. Of these,20 USA +12 PAL have
-actual active-wide frames; **all 32 preserve the complete native center RGB exactly**.
-Inactive wide buffers are excluded from this claim. Raw audit:
-[capture-audit.json](widescreen/capture-audit.json).
+- **Room edges:** the allocated terrain map supplies shared room bounds. Narrow rooms and bonus gameplay retain native 4:3; unallocated side areas remain black rather than exposing coloured strips. Pause/results keep their UI in the native centre.
+- **Moving blocks in 2-6:** added columns use the game's moving rectangles and sine-table phase, checked against native offset-per-tile columns. The decoder handles vertical address wrap and uses live displayed scroll at the first visible scanline, rather than stale blank-border registers or the ahead CPU camera. This avoids repeated or misaligned block columns.
+- **Black single frames in 2-6:** the next scanout could clear the shared widescreen buffer before presentation. A separate completed-picture buffer now publishes pixels and aspect selection together only after scanline 224. Starting the next field cannot erase or partially overwrite the displayed picture. Genuine completed black fields still display normally; no frame is artificially frozen and no extra frame delay is added.
 
-Representative PAL evidence now exists: Rev2 level 1-1, native and wide outputs,
-all display filters, VSync on and~50 FPS. Other PAL levels/special scenes remain
-unverified. Filter evidence is documented in #6.
+## Blackout evidence
 
-## Same-frame native/wide pairs
+**Before:** three isolated black output frames during the egg-block attempt, despite complete source scanouts.
 
-These 11 pairs are real F9 captures, native 256x224 and wide 342x224. Each pair is
-from one emulated frame. Raw SNES pixel geometry differs from final display
-aspect; the unchanged center and added side pixels are the purpose of these
-comparisons. PNG conversion normalizes only unused alpha; every RGB byte is
-checked against the original BMP. Game imagery belongs to its rights holders.
+![Before: three black single frames at the egg block](widescreen/2-6-blackout-before.png)
 
-| Scene / capture | Native | Wide |
-|---|---|---|
-| Tutorial introduction · 62197429519 | ![](widescreen/tutorial-intro-native.png) | ![](widescreen/tutorial-intro-wide.png) |
-| Tutorial dialog · 62323879214 | ![](widescreen/tutorial-dialog-native.png) | ![](widescreen/tutorial-dialog-wide.png) |
-| Tutorial bridge · 63000362422 | ![](widescreen/tutorial-bridge-native.png) | ![](widescreen/tutorial-bridge-wide.png) |
-| 1-1 cave entrance · 63490594791 | ![](widescreen/1-1-entry-native.png) | ![](widescreen/1-1-entry-wide.png) |
-| 1-1 cave · 63579043023 | ![](widescreen/1-1-cave-native.png) | ![](widescreen/1-1-cave-wide.png) |
-| 1-1 flowers/platforms · 64338756241 | ![](widescreen/1-1-platforms-native.png) | ![](widescreen/1-1-platforms-wide.png) |
-| 1-1 goal · 64566724821 | ![](widescreen/1-1-goal-native.png) | ![](widescreen/1-1-goal-wide.png) |
-| 1-5 autoscroller overview · 65833035412 | ![](widescreen/1-5-overview-native.png) | ![](widescreen/1-5-overview-wide.png) |
-| 1-5 autoscroller platforms · 65909039735 | ![](widescreen/1-5-platforms-native.png) | ![](widescreen/1-5-platforms-wide.png) |
-| 1-8 Salvo AFTER defeat · 88953806540 | ![](widescreen/1-8-postboss-native.png) | ![](widescreen/1-8-postboss-wide.png) |
-| Europe Rev2 1-1, combined CRT/VSync-on test · 102895842357 | ![](widescreen/pal-1-1-native.png) | ![](widescreen/pal-1-1-wide.png) |
+**After:** the contributor confirms the picture is correct. A separate 180-frame attempt contains no black source/output frames and no readback errors.
 
-## Autoscroller edge reach: different times, explicitly labelled
+![After: 180 output frames without black single frames](widescreen/2-6-blackout-after.png)
 
-These different-time images show the left edge; camera/platform positions differ.
-Right-edge crush/death in both views is contributor-confirmed, without a visual pair.
+The optional diagnostic reads the rendered game window before presentation; it does not record the desktop. It is disabled during normal play because readback can reduce performance.
 
-| Original view66004820488 | Wide65962696005 |
-|---|---|
-| ![](widescreen/1-5-left-native.png) | ![](widescreen/1-5-left-wide.png) |
+## Gameplay and integration
 
-## Existing bonus fallback
+The complete native centre, camera and enemy/object activation remain unchanged. Newly exposed scenery does not activate additional enemies or objects; native activation-boundary pop-in remains possible. In verified autoscrollers, the existing player-boundary adjustment extends reach by 43 pixels per side while preserving push/crush handling. F8/native disables that adjustment; unknown instruction anchors retain native fallback.
 
-Capture64794242507 is a genuine bonus Scratch board with `presentation_wide=0`.
-The preceding log explicitly re-enables widescreen and reports gate004
-(game-mode fallback) before the capture. Only its native buffer is shown; inactive `wide.bmp` is not presented as a wide
-frame. This demonstrates the bonus fallback only.
+Main includes #4, #8 and #6. Presentation remains native/wide selection → optional filter → aspect-correct output. Launcher controls and VSync coexist. No save or pause-menu feature is included in this PR.
 
-![Bonus board, native fallback](widescreen/bonus-native-fallback.png)
+## Validation and limits
 
-## What changes, what remains native
+- Windows Release: 12 ROM-free contracts and four read-only ROM layout checks pass.
+- USA and Europe Rev2 synthetic widescreen suites: 1905 assertions each, including buffer publication, genuine black transitions, moving columns, native-centre and guest-state preservation.
+- Negative controls reproduce the old blackout and column failures.
+- Contributor playtesting: USA through **2-8 inclusive**, with room-edge bars, 2-6 moving blocks and black single frames reported fixed.
 
-- `src/yi_ws11.c`: `YiWs11WorldTile`/`fill_world_span` reconstruct actual ROM/Map16
-  scenery outside the native viewport; private PPU/OAM passes do not overwrite
-  native center pixels. This does not synthesize extra guest objects.
-- `reject_mask`, `native_autoscroll_view` and room/profile/tile guards decide
-  eligibility. Unknown layouts/anchors, bounded narrow terrain, bonus gameplay,
-  unsupported forms/states and invalid tiles retain native output. Some known
-  UI/Mode7 and bitmap-arena paths exist; this is not blanket effect support.
-- Enemy/object spawn/despawn and camera remain original. Eggs, projectiles,
-  particles and interactive sprites appear in side regions only if already
-  generated by the game. Native-boundary pop-in/pop-out is an intentional
-  limitation. Unexpected invisible hazards/collision still need reporting.
-- **Explicit existing gameplay exception:** `player_edge_operand` alters two
-  verified SuperFX immediate operands in active supported autoscrollers, moving
-  player limits by 43 pixels per side. The original push/speed/subpixel/Baby Mario/
-  crush routines consume those shifted bounds. Thus this feature is not purely
-  output-only even though camera, activation and ROM bytes remain unchanged.
-- Exact ROM/profile and instruction anchors guard the hook. F8/native disables
-  the override; unrelated instructions/warp thresholds retain original operands.
-  Unknown edge code forces native autoscroll geometry. Hook fields are host-only,
-  not serialized guest state. Contracts check operands, state preservation,
-  fallback, native-mode restoration and invalid anchors, not real collision play.
-- A narrow room may correctly fall back to4:3. Transitions can preserve wide
-  geometry with native-only content rather than inventing terrain; inspect for
-  stale edge pixels, corruption or bad masks. F9 alone does not prove no flicker.
-
-## Technical follow-up and integration
-
-F9 now uses the identical full-output readback helper from #6: explicit output
-rectangle, initialized borders, opaque alpha, unchanged renderer settings.
-A uniquely named `ws_capture_contract` avoids target clashes with those PRs.
-Corrected native 4:3 centering is pictured in #6.
-
-Shared launcher helper: accumulate/deduplicate callbacks per target, with six
-registration orders and target isolation checked. It matches #6. The combined
-pipeline is native/wide source selection -> optional3x filtering -> correct
-presentation rectangle. Ordinary PAL/native/wide filter and
-native/wide presentation checks pass. A textual merge must preserve that ordering;
-RA is not included; filters are inherited from main.
-
-Local Release: 12 registered ROM-free contracts passed, including USA/PAL
-widescreen (1847 assertions each), all-mode native/wide presentation, renderer readback, VSync and launcher
-coexistence. Four real ROM layout-only checks passed without game execution.
-[Local results](widescreen/local-test-results.json). Hosted Windows CI is checked
-separately; it runs only ROM-free contracts, never supplied ROMs or live gameplay.
-
-## Coverage limits
-
-The contributor confirms right-edge autoscroll crush/death in both 4:3 and
-16:9. This is an owner-observed gameplay result, not a frame-by-frame audit.
-Mode7 execution is recorded in runtime logs, but a matched visual pair is
-not available. Current-build active boss deformation (including Salvo),
-further PAL special scenes and all transitions remain incompletely verified.
-The feature stays experimental and off by default pending maintainer review.
-
-## Integration after #6
-
-Updated onto main 7396f58. Desktop/CMake conflicts are resolved using one
-presenter: native/wide source selection -> optional filter -> aspect-correct output.
-The automated SDL presentation smoke test covers all five filters and repeated
-native/wide fallback, texture sizing, borders and unchanged source pixels.
-The generated launcher contains each panel exactly once; filter hotkey/persistence
-and VSync tests pass. Widescreen remains off by default and labelled experimental.
-No new real-game playthrough is claimed for this merge-resolution build.
+Earlier [Europe Rev2 native](widescreen/pal-1-1-native.png) / [wide](widescreen/pal-1-1-wide.png) examples and the [native-centre audit](widescreen/capture-audit.json) remain available. Broader PAL special scenes, paired Mode7 visuals and later stages are not comprehensively verified. The feature remains experimental.

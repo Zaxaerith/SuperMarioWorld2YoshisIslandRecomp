@@ -8,8 +8,7 @@ Active supported autoscrollers move the player's edge limits outward by 43 pixel
 
 Validation: `ws_contract` and `ws_pal_contract` use synthetic cartridges and require no game ROM. Both are registered with CTest. To check a supplied ROM's layout without executing it, use `ws_contract --layout-only "path/to/ROM.sfc"`. These checks do not replace gameplay testing.
 
-Contributor-reported USA gameplay now reaches 1-8. Right-edge crush/death in both views is owner-confirmed; historical active Burt,
-scrolling and narrow-room evidence are indexed. Complete-game compatibility is not claimed.
+Contributor-reported USA gameplay reaches **2-8 inclusive with no visible issues reported** after the room-edge, moving-column and completed-picture fixes. See [fixes and before/after evidence](evidence/WIDESCREEN_REVIEW.md). Complete-game or all-region compatibility is not claimed.
 
 ## Exposed edges, collisions and fallback policy
 
