@@ -1004,15 +1004,12 @@ int main(int argc, char **argv) {
       (vsync_requested ? SDL_RENDERER_PRESENTVSYNC : 0));
   if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) Die("SDL_CreateRenderer failed");
-  SDL_RendererInfo renderer_info={0};
-  SDL_GetRendererInfo(renderer,&renderer_info);
-  printf("[Video] SDL renderer: %s (flags=%u)\n",renderer_info.name?renderer_info.name:"unknown",renderer_info.flags);
 #if SDL_VERSION_ATLEAST(2,0,18)
   int vsync_result = SDL_RenderSetVSync(renderer, vsync_requested ? 1 : 0);
 #else
   int vsync_result = 0;
 #endif
-  SDL_RendererInfo renderer_info;
+  SDL_RendererInfo renderer_info={0};
   if(SDL_GetRendererInfo(renderer,&renderer_info)==0)
     printf("[Video] renderer=%s VSync requested=%s apply=%s\n",renderer_info.name,
       vsync_requested?"on":"off",vsync_result==0?"ok":SDL_GetError());
