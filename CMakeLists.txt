@@ -75,6 +75,8 @@ endif()
 # Interactive Player Target
 if(YI_BUILD_PLAY)
   add_executable(yoshis_island_recomp src/desktop.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  target_sources(yoshis_island_recomp PRIVATE src/yi_ws11.c src/yi_ws_launcher.cpp)
+  target_compile_definitions(yoshis_island_recomp PRIVATE YI_WIDESCREEN_PROTOTYPE=1)
   # GUI subsystem: no console window behind the SDL game window.
   set_target_properties(yoshis_island_recomp PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -101,6 +103,8 @@ if(YI_BUILD_PLAY)
 
   # recomp-ui native GUI launcher integration
   recomp_target_launcher_ui(yoshis_island_recomp CONSOLE snes)
+  include(cmake/YiLauncherPanel.cmake)
+  yi_launcher_panel(yoshis_island_recomp YiWsDrawLauncher)
   snesrecomp_rom_identity(yoshis_island_recomp "${CMAKE_CURRENT_SOURCE_DIR}/rom_identity.txt")
   snesrecomp_target_rom_cache(yoshis_island_recomp)
 
@@ -121,6 +125,7 @@ if(YI_BUILD_PLAY)
       "${YI_SDL_ROOT}/bin/SDL2.dll" "$<TARGET_FILE_DIR:yoshis_island_recomp>")
   endif()
 endif()
+
 
 # Headless Diagnostic Target (yi_headless)
 if(YI_BUILD_HEADLESS)
@@ -248,7 +253,7 @@ if(YI_BUILD_TESTS)
 endif()
 
 if(YI_BUILD_PLAY)
-  target_sources(yoshis_island_recomp PRIVATE src/yi_video_effects.c src/yi_effects_ui.cpp src/yi_effect_diagnostics.c)
+  target_sources(yoshis_island_recomp PRIVATE src/yi_video_effects.c src/yi_effects_ui.cpp src/yi_effect_diagnostics.c src/yi_presentation.c)
   include(cmake/YiLauncherPanel.cmake)
   yi_launcher_panel(yoshis_island_recomp YiEffectsDrawLauncher)
 endif()
@@ -277,6 +282,72 @@ if(YI_BUILD_TESTS)
   yi_set_link_options(capture_contract)
   add_test(NAME capture_contract COMMAND capture_contract)
 
+  add_executable(presentation_contract tests/presentation_contract.c src/yi_presentation.c src/yi_video_effects.c)
+  target_include_directories(presentation_contract PRIVATE src ${SDL2_INCLUDE_DIRS})
+  if(TARGET SDL2::SDL2)
+    target_link_libraries(presentation_contract PRIVATE SDL2::SDL2)
+  else()
+    target_link_libraries(presentation_contract PRIVATE ${SDL2_LIBRARIES})
+  endif()
+  target_compile_definitions(presentation_contract PRIVATE SDL_MAIN_HANDLED)
+  yi_set_link_options(presentation_contract)
+  add_test(NAME presentation_contract COMMAND presentation_contract)
+endif()
+
+if(YI_BUILD_TESTS)
+  add_executable(ws_contract tests/ws_contract.c src/yi_ws11.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  target_include_directories(ws_contract PRIVATE
+    ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
+    ${SNESRECOMP_ROOT}/runner/src/desktop
+    ${CMAKE_CURRENT_SOURCE_DIR}/config
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  if(TARGET SDL2::SDL2)
+    target_link_libraries(ws_contract PRIVATE SDL2::SDL2)
+  else()
+    target_include_directories(ws_contract PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(ws_contract PRIVATE ${SDL2_LIBRARIES})
+  endif()
+  target_compile_definitions(ws_contract PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
+  if(NOT MSVC)
+    target_compile_options(ws_contract PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
+  endif()
+  target_compile_definitions(ws_contract PRIVATE YI_WIDESCREEN_PROTOTYPE=1)
+  yi_set_link_options(ws_contract)
+  target_link_libraries(ws_contract PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
+  if(WIN32 AND DEFINED YI_SDL_ROOT AND EXISTS "${YI_SDL_ROOT}/bin/SDL2.dll")
+    add_custom_command(TARGET ws_contract POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${YI_SDL_ROOT}/bin/SDL2.dll" "$<TARGET_FILE_DIR:ws_contract>")
+  endif()
+  enable_testing()
+  add_test(NAME ws_contract COMMAND ws_contract)
+endif()
+
+if(YI_BUILD_TESTS)
+  add_executable(ws_pal_contract tests/ws_pal_contract.c src/yi_ws11.c src/game_rtl.c ${SNESRECOMP_RUNNER_SOURCES})
+  target_include_directories(ws_pal_contract PRIVATE
+    ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
+    ${SNESRECOMP_ROOT}/runner/src/desktop
+    ${CMAKE_CURRENT_SOURCE_DIR}/config
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  if(TARGET SDL2::SDL2)
+    target_link_libraries(ws_pal_contract PRIVATE SDL2::SDL2)
+  else()
+    target_include_directories(ws_pal_contract PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(ws_pal_contract PRIVATE ${SDL2_LIBRARIES})
+  endif()
+  target_compile_definitions(ws_pal_contract PRIVATE SDL_MAIN_HANDLED SNESRECOMP_TRACE=0 SNESRECOMP_ENABLE_MODS=0)
+  if(NOT MSVC)
+    target_compile_options(ws_pal_contract PRIVATE -w -Wno-implicit-function-declaration -ffunction-sections -fdata-sections)
+  endif()
+  target_compile_definitions(ws_pal_contract PRIVATE YI_WIDESCREEN_PROTOTYPE=1)
+  yi_set_link_options(ws_pal_contract)
+  target_link_libraries(ws_pal_contract PRIVATE snesrecomp_game ${SNESRECOMP_RUNNER_LIBRARIES} m)
+  if(WIN32 AND DEFINED YI_SDL_ROOT AND EXISTS "${YI_SDL_ROOT}/bin/SDL2.dll")
+    add_custom_command(TARGET ws_pal_contract POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${YI_SDL_ROOT}/bin/SDL2.dll" "$<TARGET_FILE_DIR:ws_pal_contract>")
+  endif()
+  enable_testing()
+  add_test(NAME ws_pal_contract COMMAND ws_pal_contract)
 endif()
 
 if(YI_BUILD_TESTS)

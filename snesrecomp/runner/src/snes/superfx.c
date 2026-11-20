@@ -284,6 +284,10 @@ static void set_sz(SuperFx *f, uint16_t v) {
   flag(f, SFR_S, v & 0x8000); flag(f, SFR_Z, v == 0);
 }
 
+static uint16_t title_immediate(SuperFx *f, uint32_t pc, uint16_t value, unsigned bytes) {
+  return f->immediate_override && !f->ws_replay_mode ?
+      f->immediate_override(f->immediate_context,f,pc,value,bytes) : value;
+}
 static void instruction(SuperFx *f, uint8_t op) {
   unsigned n = op & 15, a = alt(f);
   if (op == 0x00) {
@@ -362,7 +366,7 @@ static void instruction(SuperFx *f, uint8_t op) {
   if (op >= 0x98 && op <= 0x9d) { if(!(f->sfr&SFR_ALT1)) wr(f,15,rv(f,n)); else { f->pbr=rv(f,n)&0x7f; wr(f,15,sr(f)); f->cbr=rv(f,15)&0xfff0; flush_cache(f); } reset_prefix(f); return; }
   if (op == 0x9e) { wd(f,sr(f)&0xff); flag(f,SFR_S,rv(f,f->dreg)&0x80); flag(f,SFR_Z,rv(f,f->dreg)==0); reset_prefix(f); return; }
   if (op == 0x9f) { int32_t z=(int16_t)sr(f)*(int16_t)rv(f,6); if(f->sfr&SFR_ALT1) wr(f,4,z); wd(f,z>>16); set_sz(f,rv(f,f->dreg)); flag(f,SFR_CY,z&0x8000); reset_prefix(f); step_clocks(f,((f->cfgr&0x20)?3:7)*(f->clsr?1:2)); return; }
-  if (op >= 0xa0 && op <= 0xaf) { if(f->sfr&SFR_ALT1){ f->ramaddr=(uint16_t)pipe(f)<<1; wr(f,n,read_ram_buffer(f,f->ramaddr)|((uint16_t)read_ram_buffer(f,f->ramaddr^1)<<8)); } else if(f->sfr&SFR_ALT2){ f->ramaddr=(uint16_t)pipe(f)<<1; write_ram_buffer(f,f->ramaddr,(uint8_t)rv(f,n)); write_ram_buffer(f,f->ramaddr^1,(uint8_t)(rv(f,n)>>8)); } else wr(f,n,(int8_t)pipe(f)); reset_prefix(f); return; }
+  if (op >= 0xa0 && op <= 0xaf) { if(f->sfr&SFR_ALT1){ f->ramaddr=(uint16_t)pipe(f)<<1; wr(f,n,read_ram_buffer(f,f->ramaddr)|((uint16_t)read_ram_buffer(f,f->ramaddr^1)<<8)); } else if(f->sfr&SFR_ALT2){ f->ramaddr=(uint16_t)pipe(f)<<1; write_ram_buffer(f,f->ramaddr,(uint8_t)rv(f,n)); write_ram_buffer(f,f->ramaddr^1,(uint8_t)(rv(f,n)>>8)); } else { uint32_t pc=((uint32_t)f->pbr<<16)|(uint16_t)(rv(f,15)-1); uint16_t value=(int8_t)pipe(f); wr(f,n,title_immediate(f,pc,value,1)); } reset_prefix(f); return; }
   if (op >= 0xb0 && op <= 0xbf) { if(!(f->sfr&SFR_B)) f->sreg=n; else { wd(f,rv(f,n)); flag(f,SFR_OV,rv(f,f->dreg)&0x80); set_sz(f,rv(f,f->dreg)); reset_prefix(f); } return; }
   if (op == 0xc0) { wd(f,sr(f)>>8); flag(f,SFR_S,rv(f,f->dreg)&0x80); flag(f,SFR_Z,rv(f,f->dreg)==0); reset_prefix(f); return; }
   if (op >= 0xc1 && op <= 0xcf) { uint16_t q=(f->sfr&SFR_ALT2)?n:rv(f,n); wd(f,(f->sfr&SFR_ALT1)?(sr(f)^q):(sr(f)|q)); set_sz(f,rv(f,f->dreg)); reset_prefix(f); return; }
@@ -370,12 +374,15 @@ static void instruction(SuperFx *f, uint8_t op) {
   if (op == 0xdf) { if(!(f->sfr&SFR_ALT2)) f->colr=color(f,read_rom_buffer(f)); else if(!(f->sfr&SFR_ALT1)){ sync_ram(f); f->rambr=sr(f)&1; } else { sync_rom(f); f->rombr=sr(f)&0x7f; } reset_prefix(f); return; }
   if (op >= 0xe0 && op <= 0xee) { wr(f,n,rv(f,n)-1); set_sz(f,rv(f,n)); reset_prefix(f); return; }
   if (op == 0xef) { uint8_t q=read_rom_buffer(f); switch(a){case 0:wd(f,q);break;case 1:wd(f,(q<<8)|(uint8_t)sr(f));break;case 2:wd(f,(sr(f)&0xff00)|q);break;default:wd(f,(int8_t)q);break;} reset_prefix(f); return; }
-  if (op >= 0xf0) { if(f->sfr&SFR_ALT1){ f->ramaddr=pipe(f); f->ramaddr|=(uint16_t)pipe(f)<<8; wr(f,n,read_ram_buffer(f,f->ramaddr)|((uint16_t)read_ram_buffer(f,f->ramaddr^1)<<8)); } else if(f->sfr&SFR_ALT2){ f->ramaddr=pipe(f); f->ramaddr|=(uint16_t)pipe(f)<<8; write_ram_buffer(f,f->ramaddr,(uint8_t)rv(f,n)); write_ram_buffer(f,f->ramaddr^1,(uint8_t)(rv(f,n)>>8)); } else { uint8_t lo=pipe(f); wr(f,n,lo|((uint16_t)pipe(f)<<8)); } reset_prefix(f); return; }
+  if (op >= 0xf0) { if(f->sfr&SFR_ALT1){ f->ramaddr=pipe(f); f->ramaddr|=(uint16_t)pipe(f)<<8; wr(f,n,read_ram_buffer(f,f->ramaddr)|((uint16_t)read_ram_buffer(f,f->ramaddr^1)<<8)); } else if(f->sfr&SFR_ALT2){ f->ramaddr=pipe(f); f->ramaddr|=(uint16_t)pipe(f)<<8; write_ram_buffer(f,f->ramaddr,(uint8_t)rv(f,n)); write_ram_buffer(f,f->ramaddr^1,(uint8_t)(rv(f,n)>>8)); } else { uint32_t pc=((uint32_t)f->pbr<<16)|(uint16_t)(rv(f,15)-1); uint8_t lo=pipe(f); uint16_t value=lo|((uint16_t)pipe(f)<<8); wr(f,n,title_immediate(f,pc,value,2)); } reset_prefix(f); return; }
 }
 
 static void run_one(SuperFx *f) {
   if (!(f->sfr & SFR_G)) { step_clocks(f, 6); return; }
   uint8_t op=f->pipeline;
+  if (f->observe && !f->ws_replay_mode &&
+      ((((uint32_t)f->pbr << 16) | (uint16_t)(rv(f,15) - 1)) == f->observe_pc))
+    f->observe(f->observe_context, f);
   uint64_t sequence=++f->instruction_count;
   SuperFxTraceEntry *trace=&f->trace[sequence&255];
   trace->sequence=sequence;
@@ -546,6 +553,11 @@ void superfx_destroy(SuperFx *f) {
   free(f);
 }
 void superfx_reset(SuperFx *f) {
+  uint32_t observe_pc = f->observe_pc;
+  void (*observe)(void *, const SuperFx *) = f->observe;
+  void *observe_context = f->observe_context;
+  uint16_t (*immediate_override)(void *,const SuperFx *,uint32_t,uint16_t,unsigned)=f->immediate_override;
+  void *immediate_context=f->immediate_context;
   uint8_t *rom=f->rom,*ram=f->ram; uint32_t rs=f->rom_size,rm=f->ram_size;
   uint8_t *ws_pixels=f->ws_pixels,*ws_valid=f->ws_valid;
   uint8_t *ws_present_pixels=f->ws_present_pixels;
@@ -555,6 +567,8 @@ void superfx_reset(SuperFx *f) {
   SuperFxPresentationReplay *presentation=f->presentation;
   uint16_t ws_extra=f->ws_extra;
   memset(f,0,sizeof(*f)); f->rom=rom;f->rom_size=rs;f->rom_mask=rs-1;f->ram=ram;f->ram_size=rm;f->ram_mask=rm-1;
+  f->observe_pc=observe_pc;f->observe=observe;f->observe_context=observe_context;
+  f->immediate_override=immediate_override;f->immediate_context=immediate_context;
   f->ws_pixels=ws_pixels;f->ws_valid=ws_valid;f->ws_task_state=ws_task_state;
   f->ws_present_pixels=ws_present_pixels;
   f->ws_present_valid=ws_present_valid;

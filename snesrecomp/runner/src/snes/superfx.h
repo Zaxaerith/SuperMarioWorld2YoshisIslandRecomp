@@ -69,6 +69,17 @@ typedef struct SuperFx {
   uint64_t instruction_count;
   SuperFxTraceEntry trace[256];
 
+  /* Read-only host observation at one instruction PC; never serialized. */
+  uint32_t observe_pc;
+  void (*observe)(void *context, const struct SuperFx *fx);
+  void *observe_context;
+
+  /* Optional title-selected immediate operands. No ROM mutation; excluded
+   * from save states. NULL preserves exact hardware instruction semantics. */
+  uint16_t (*immediate_override)(void *context, const struct SuperFx *fx,
+                                 uint32_t pc, uint16_t value, unsigned bytes);
+  void *immediate_context;
+
   /* Optional presentation-only enhancement state. Architectural GSU state
    * above remains authoritative and always follows native hardware behavior. */
   SuperFxEnhancementMode enhancement_mode;
