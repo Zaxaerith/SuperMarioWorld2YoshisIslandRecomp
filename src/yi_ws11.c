@@ -20,6 +20,16 @@ static Ppu detached;
 static Ppu diagnostic_ppu;
 static uint8_t diagnostic_wram[0x20000], diagnostic_gsu[0x10000];
 static bool diagnostic_valid, presentation_wide;
+/* Keep transient eligibility changes preceding F9, not only its final frame.
+ * Host-only metadata: no account data, input changes or guest execution. */
+typedef struct WsFrameDiagnostic {
+  unsigned frame, mode, pause, stage, camera_x, camera_y;
+  unsigned ppu_first, ppu_last, main_first, main_last, ui_first, ui_last;
+  unsigned gate, tile_cause, failed_line, scenery, wide, cleared;
+} WsFrameDiagnostic;
+static WsFrameDiagnostic frame_diagnostic, diagnostic_history[180];
+static unsigned history_next, history_count;
+
 static uint8_t pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
 static bool supported, enabled, active, requested;
 typedef struct WsLayout { unsigned table, mode_ram, gameplay_mode, map_anchor, first_sprite, message_ram, autoscroll_ram, pause_ram; bool pal; const char *name; } WsLayout;
@@ -108,9 +118,11 @@ static unsigned ui_scene(const Ppu *p) {
   if (!layout || !p || bonus_scene(p) || PPU_interlace(p) || PPU_overscan(p)) return 0;
   unsigned mode=g_ram[0x118], shift=layout->pal?4:0;
   /* Pause keeps the gameplay mode; its region-specific state byte is the
-   * authoritative discriminator, including opening and closing phases. */
+   * state discriminator. Opening/closing can still show live BG1 scenery;
+   * only switch the side policy once the menu actually hides that landscape. */
   if (mode>=layout->gameplay_mode-4 && mode<=layout->gameplay_mode+3 &&
-      g_ram[layout->pause_ram] && PPU_mode(p)==1) return 4;
+      g_ram[layout->pause_ram] && PPU_mode(p)==1 &&
+      !((p->screenEnabled[0] | p->screenEnabled[1]) & 1)) return 4;
   if (PPU_mode(p)==7 && (mode==9+shift || mode==10+shift)) return 3;
   if (PPU_mode(p)>1) return 0;
   if (mode>=0x20+shift && mode<=0x29+shift) return 2;
@@ -122,7 +134,7 @@ static unsigned ui_scene(const Ppu *p) {
 }
 static void configure_ui_background(Ppu *p,unsigned kind) {
   if(kind==3) return; /* Native Mode7 projection over the complete map. */
-  unsigned layers = kind==4 ? 0u : kind==2 ? 4u : (PPU_bgTilemapWider(p,1)?2u:0u);
+  unsigned layers = (kind==2 || kind==4) ? 0u : (PPU_bgTilemapWider(p,1)?2u:0u);
   p->screenEnabled[0] &= layers;
   p->screenEnabled[1] &= layers;
   p->screenWindowed[0]=p->screenWindowed[1]=0;
@@ -234,6 +246,7 @@ static uint16_t player_edge_operand(void *context,const SuperFx *fx,
 void YiWs11Init(YiRomProfile profile) {
   supported = enabled = active = false;
   presentation_wide = diagnostic_valid = false;
+  history_next=history_count=0;
   memset(rooms, 0, sizeof(rooms)); cached_room = -1;
   narrow_component = edge_bounds_verified = false;
   memset(captures, 0, sizeof(captures));
@@ -534,6 +547,14 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
     left_pixels = right_pixels = left_width = right_width = 0;
     frame_reject = reject_mask(native); frame_tile_reason = 0;
     active = frame_reject == 0;
+    memset(&frame_diagnostic,0,sizeof(frame_diagnostic));
+    frame_diagnostic.frame=frames;frame_diagnostic.mode=g_ram[0x118];
+    frame_diagnostic.pause=g_ram[layout->pause_ram];frame_diagnostic.stage=rd16(g_ram+0x21a);
+    frame_diagnostic.camera_x=rd16(g_ram+0x39);frame_diagnostic.camera_y=rd16(g_ram+0x3b);
+    frame_diagnostic.ppu_first=native->bgmode;frame_diagnostic.main_first=native->screenEnabled[0];
+    frame_diagnostic.ui_first=ui_scene(native);
+    if(frame_reject)frame_diagnostic.failed_line=1;
+
     selected = NULL;
     for (unsigned i = 0; active && i < 3; ++i) {
       const OamCapture *c = &captures[(capture_next + 2 - i) % 3];
@@ -545,7 +566,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   }
   if (active) {
     unsigned reason = reject_mask(native);
-    if (reason) { frame_reject |= reason; active = false; }
+    if (reason) { frame_reject |= reason; active = false; if(!frame_diagnostic.failed_line)frame_diagnostic.failed_line=line; }
   }
   /* Retain the native raster blanking; extend only visible scanlines sideways.
    * No vertical reconstruction, fixed crop or extra overlay is applied. */
@@ -575,7 +596,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
           tile == PpuRenderVram(native)[map_address(native, lx, ly)])
         ++matches;
     }
-    if (!tiled_intro() && !bonus_scene(native) && !ui_scene(native) && matches < 3) { active = false; ++tile_failures; frame_tile_reason = 1; }
+    if (!tiled_intro() && !bonus_scene(native) && !ui_scene(native) && matches < 3) { active = false; ++tile_failures; frame_tile_reason = 1; if(!frame_diagnostic.failed_line)frame_diagnostic.failed_line=line; }
     if (active) {
       copy_legacy_ppu(&detached, native);
       detached.renderVram = NULL;
@@ -613,12 +634,15 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       }
       if (!tiled_intro() && !bonus_scene(native) && !ui_scene(native) && (!fill_world_span(&detached, g_ram, cart->ram, cart, ox, wy, line, -(int)detached.extraLeftCur, 0) ||
           !fill_world_span(&detached, g_ram, cart->ram, cart, ox, wy, line, 256, 256 + detached.extraRightCur))) {
-        active = false; ++tile_failures; frame_tile_reason = 2;
+        active = false; ++tile_failures; frame_tile_reason = 2; if(!frame_diagnostic.failed_line)frame_diagnostic.failed_line=line;
       }
       if (active) {
         fill_cross_section_span(&detached,g_ram,cart->ram,cart,line,-(int)detached.extraLeftCur,0);
         fill_cross_section_span(&detached,g_ram,cart->ram,cart,line,256,256+detached.extraRightCur);
-        if(ui_scene(native)!=4) PpuRenderDetachedLegacyLine(&detached, line);
+        /* Results use BG3 for text, not a periodic backdrop. Like pause,
+         * keep their margins black even when CGRAM backdrop is non-black. */
+        unsigned ui_kind=ui_scene(native);
+        if(ui_kind!=2 && ui_kind!=4) PpuRenderDetachedLegacyLine(&detached, line);
         const uint8_t *row = pixels + (line - 1) * YI_WS_WIDTH * 4;
         for (unsigned x = 0; x < YI_WS_EXTRA; ++x) {
           if (row[x*4] || row[x*4+1] || row[x*4+2]) ++left_pixels;
@@ -632,6 +656,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   memcpy(pixels + ((line - 1) * YI_WS_WIDTH + YI_WS_EXTRA) * 4,
          native->renderBuffer + (line - 1) * native->renderPitch, 256 * 4);
   if (line == YI_WS_HEIGHT) {
+    frame_diagnostic.scenery=active;
     if (!active && enabled && !narrow_component && !native_autoscroll_view() && g_ram[0x118] >= layout->gameplay_mode - 4 &&
         g_ram[0x118] <= layout->gameplay_mode + 3 && original_band_is_black(0, 224)) {
       memset(pixels, 0, sizeof(pixels)); active = true;
@@ -645,6 +670,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
         g_ram[0x118] == 0x1f + (layout->pal ? 4 : 0);
     if (!active && enabled && !narrow_component && !native_autoscroll_view() && !bonus_scene(native) &&
         ((frame_tile_reason && !frame_reject && room_profile()) || game_transition || goal_transition)) {
+      frame_diagnostic.cleared=1;
       /* No stale side pixels during room loading; native center is current. */
       for (unsigned y=0;y<224;++y) {
         memset(pixels+y*YI_WS_WIDTH*4,0,YI_WS_EXTRA*4);
@@ -653,6 +679,10 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       presentation_wide = game_transition || goal_transition;
       if (frame_tile_reason && !frame_reject && room_profile()) active = true;
     }
+    frame_diagnostic.ppu_last=native->bgmode;frame_diagnostic.main_last=native->screenEnabled[0];
+    frame_diagnostic.ui_last=ui_scene(native);frame_diagnostic.gate=frame_reject;
+    frame_diagnostic.tile_cause=frame_tile_reason;frame_diagnostic.wide=YiWs11PresentationWide();
+    diagnostic_history[history_next++%180]=frame_diagnostic;if(history_count<180)++history_count;
     if (active) ++frames_wide;
     unsigned end_reject = reject_mask(native);
     uint32_t room_stream = rd24(g_snes->cart->ram + 0x2600);
@@ -690,4 +720,20 @@ void YiWs11CaptureTerrain(const char *path) {
       fwrite(diagnostic_gsu,1,sizeof(diagnostic_gsu),f)==sizeof(diagnostic_gsu);
   if (fclose(f)) ok=false;
   printf("[WS11] F9 local terrain evidence: %s\n",ok?"saved":"write failed");
+  char history_path[2048];size_t length=strlen(path),suffix=strlen("-terrain.bin");
+  if(length>=suffix && !strcmp(path+length-suffix,"-terrain.bin"))
+    snprintf(history_path,sizeof(history_path),"%.*s-history.csv",(int)(length-suffix),path);
+  else snprintf(history_path,sizeof(history_path),"%s-history.csv",path);
+  FILE *history=fopen(history_path,"wb");
+  if(history) {
+    fprintf(history,"frame,mode,pause,stage,camera_x,camera_y,ppu_first,ppu_last,main_first,main_last,ui_first,ui_last,gate,tile_cause,failed_line,scenery,wide,cleared\n");
+    for(unsigned i=0;i<history_count;++i) {
+      const WsFrameDiagnostic *d=&diagnostic_history[(history_next-history_count+i)%180];
+      fprintf(history,"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+          d->frame,d->mode,d->pause,d->stage,d->camera_x,d->camera_y,d->ppu_first,d->ppu_last,
+          d->main_first,d->main_last,d->ui_first,d->ui_last,d->gate,d->tile_cause,d->failed_line,d->scenery,d->wide,d->cleared);
+    }
+    fclose(history);
+  }
+
 }

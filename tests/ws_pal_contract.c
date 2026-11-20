@@ -300,6 +300,17 @@ static int test_ws_detached_composition(void) {
       TEST_ASSERT(YiWs11Active() && margins_black && native_ui,"all pause phases retain original menu without side repetition or colored backdrop bleed");
     }
     g_ram[0xb11]=0;*g_ppu=pause_source;
+    /* Pause state precedes the visible menu and can outlive it on close.
+     * Until BG1 is hidden, the live landscape and side sprites must remain. */
+    const unsigned landscape_pause_states[]={1,0x14};
+    for(unsigned state=0;state<2;++state) {
+      g_ram[0xb11]=landscape_pause_states[state];
+      for(unsigned line=1;line<=224;++line) {ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+      TEST_ASSERT(YiWs11Active() && wide[(39*YI_WS_WIDTH+YI_WS_EXTRA-24)*4+2]==255,
+          "opening/closing pause flag does not blank visible BG1 scenery or side sprites");
+    }
+    g_ram[0xb11]=0;
+
     /* The neighboring regional status address must not trigger dialogue clipping. */
     fixture_word(g_ram+0xd0f,9);
     for(unsigned line=1;line<=224;++line) { ppu_runLine(g_ppu,line); YiWs11RenderLine(g_ppu,line); }
@@ -887,7 +898,7 @@ static int test_ws_detached_composition(void) {
     }
     /* Fixed UI family uses the same background policy across retry/results,
      * not one hand-authored patch for each individual screen. */
-    const unsigned ui_modes[]={0x13,0x14,0x15,0x20,0x22,0x24,0x26,0x28,0x3b,0x3c,0x3d,0x40};
+    const unsigned ui_modes[]={0x13,0x14,0x15,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x3b,0x3c,0x3d,0x40};
     for(unsigned k=0;k<sizeof(ui_modes)/sizeof(ui_modes[0]);++k) {
       g_ram[0x118]=ui_modes[k]+4;
       g_ppu->bgmode=1;g_ppu->bgXsc[0]=0x1c;g_ppu->bgXsc[1]=0x1c;g_ppu->bgXsc[2]=0x34;
@@ -897,6 +908,15 @@ static int test_ws_detached_composition(void) {
       bool original=true;
       for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))original=false;
       TEST_ASSERT(YiWs11Active()&&original&&preserved,"centered UI family preserves native picture and PPU");
+      if(ui_modes[k]>=0x20 && ui_modes[k]<=0x29) {
+        bool black=true;
+        for(unsigned y=0;y<224;++y)for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA || x>=YI_WS_EXTRA+256) {
+          const uint8_t *pixel=wide+(y*YI_WS_WIDTH+x)*4;
+          if(pixel[0]||pixel[1]||pixel[2])black=false;
+        }
+        TEST_ASSERT(black,"all result/score phases keep text and backdrop out of both margins");
+      }
+
     }
     g_ram[0x118]=14;g_ppu->bgmode=7;g_ppu->screenEnabled[0]=1;
     memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;
