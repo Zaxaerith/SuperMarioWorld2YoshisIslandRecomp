@@ -1,4 +1,5 @@
 #include "yi_capture.h"
+#include "yi_present_trace.h"
 /*
  * Super Mario World 2: Yoshi's Island (SNESRecomp Native AOT Desktop Player)
  * Real-time SDL2 interactive host: PAL/NTSC gameplay, authentic PPU/APU, SuperFX GSU,
@@ -1015,6 +1016,9 @@ int main(int argc, char **argv) {
       vsync_requested?"on":"off",vsync_result==0?"ok":SDL_GetError());
 
   SDL_RenderSetLogicalSize(renderer, pres_w, pres_h);
+  const char *present_trace=SDL_getenv("YI_PRESENT_TRACE");
+  YiPresentTraceInit(present_trace && !strcmp(present_trace,"1"));
+  if(yi_present_trace.enabled)printf("[Video] Pre-Present readback diagnostic enabled; may reduce frame rate.\n");
 
   static YiPresentation presentation;
   static uint8_t fb_pixels[256 * 4 * 256];
@@ -1118,6 +1122,7 @@ int main(int argc, char **argv) {
     uint64_t filter_ticks=0;
     if(!YiPresentationDraw(&presentation,renderer,fb_pixels,YiWs11Pixels(),wide,g_video_effect,pres_w,pres_h,&filter_ticks))
       Die("Presentation failed");
+    YiPresentTraceRecord(renderer,source,source_width,224,source_width*4,wide,g_video_effect);
     YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
         (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
     if (capture_requested) {
@@ -1127,6 +1132,8 @@ int main(int argc, char **argv) {
       snprintf(wide_path,sizeof(wide_path),"ws-%llu-wide.bmp",capture_id);
       snprintf(terrain_path,sizeof(terrain_path),"ws-%llu-terrain.bin",capture_id);
       YiWs11CaptureTerrain(terrain_path);
+      char trace_prefix[64];snprintf(trace_prefix,sizeof(trace_prefix),"ws-%llu",capture_id);
+      YiPresentTraceSave(trace_prefix);
       capture_ws_pixels(native_path, fb_pixels, 256, 224, 256 * 4);
       capture_ws_pixels(wide_path, YiWs11Pixels(), YI_WS_WIDTH, 224, YI_WS_WIDTH * 4);
       snprintf(present_path,sizeof(present_path),"ws-%llu-present.bmp",capture_id);
@@ -1137,12 +1144,14 @@ int main(int argc, char **argv) {
       }
       snprintf(info_path,sizeof(info_path),"ws-%llu-info.txt",capture_id);
       FILE* info=fopen(info_path,"wb");
-      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nrenderer=%s\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,renderer_info.name?renderer_info.name:"unknown",YiEffectName(g_video_effect));fclose(info);}
+      if(info){fprintf(info,"capture=%llu\npresentation_wide=%d\nscene=%s\nregion_hz=%.6f\nvsync_requested=%d\nrenderer=%s\npresent_trace=%d\neffect=%s\nnative=256x224\nwide=342x224\nRaw images use SNES pixel geometry; present.bmp records the final aspect-correct output. If presentation_wide=0 the wide buffer is diagnostic, not a valid current wide view.\n",capture_id,wide,YiWs11SceneName(),YiRomFrameRate(s_rom_profile),vsync_requested,renderer_info.name?renderer_info.name:"unknown",yi_present_trace.enabled,YiEffectName(g_video_effect));fclose(info);}
       printf("[WS11] F9 capture id=%llu: wide=%d room=%s\n",capture_id,wide,YiWs11SceneName());
       YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
       capture_requested = false;
     }
+    uint64_t present_start=SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer);
+    YiPresentTracePresented((unsigned)((SDL_GetPerformanceCounter()-present_start)*1000000/perf_freq));
     YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
@@ -1200,6 +1209,7 @@ int main(int argc, char **argv) {
     free(g_audiobuffer);
     g_audiobuffer = NULL;
   }
+  YiPresentTraceDestroy();
   YiPresentationDestroy(&presentation);
   if (renderer) SDL_DestroyRenderer(renderer);
   if (window) SDL_DestroyWindow(window);
