@@ -856,6 +856,19 @@ static int test_ws_detached_composition(void) {
     TEST_ASSERT(mode2_center&&mode2_unchanged&&!memcmp(ram_before,g_ram,sizeof(ram_before))&&
       !memcmp(sram_before,sram,sizeof(sram_before))&&!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
       "Mode-2 rendering preserves original picture and guest state");
+    /* A moving column can cross the final Map16 row before the native
+     * blank band. Hardware tilemap addressing wraps; scenery must not blink. */
+    fixture_word(g_ram+0x3b,1804);g_ppu->vScroll[0]=780;
+    for(unsigned phase=780;phase<1024;phase+=17) {
+      for(unsigned col=0;col<32;++col)g_ppu->vram[0x7420+col]=0x2000|phase;
+      for(unsigned line=1;line<=224;++line){g_ppu->inidisp=line<=8||line>=217?0x8f:15;ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+      TEST_ASSERT(YiWs11Active() && YiWs11PresentationWide() && wide[(100*YI_WS_WIDTH+YI_WS_WIDTH-1)*4+1]==255,
+          "Mode-2 moving columns retain visible margins when their world address wraps");
+      bool exact=true;
+      for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))exact=false;
+      TEST_ASSERT(exact,"wrapping offset columns preserve every native center pixel");
+    }
+    fixture_word(g_ram+0x3b,256);g_ppu->vScroll[0]=256;
     /* The ordinary terrain path also covers Burt; native BG2 body is never
      * repeated in side columns. No boss simulation or camera patch runs. */
     for(unsigned arena=0;arena<2;++arena) {

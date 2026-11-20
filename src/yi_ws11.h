@@ -11,6 +11,7 @@ void YiWs11Init(YiRomProfile profile);
 void YiWs11Toggle(void);
 void YiWs11CaptureTerrain(const char *path);
 void YiWs11SetEnabled(bool enabled);
+void YiWs11FrameTiming(unsigned emu_us,unsigned draw_us);
 void YiWs11RenderLine(const Ppu *native, unsigned line);
 bool YiWs11Active(void);
 bool YiWs11PresentationWide(void);

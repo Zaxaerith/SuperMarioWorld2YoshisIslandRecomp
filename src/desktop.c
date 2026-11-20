@@ -1106,8 +1106,10 @@ int main(int argc, char **argv) {
     update_keyboard(key_states);
 
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
+    uint64_t emulation_start=SDL_GetPerformanceCounter();
     RtlRunFrame(s_pad_state);
     GameDrawPpuFrame();
+    uint64_t emulation_end=SDL_GetPerformanceCounter();
 
     /* Present active viewport */
     bool wide = YiWs11PresentationWide();
@@ -1116,6 +1118,8 @@ int main(int argc, char **argv) {
     uint64_t filter_ticks=0;
     if(!YiPresentationDraw(&presentation,renderer,fb_pixels,YiWs11Pixels(),wide,g_video_effect,pres_w,pres_h,&filter_ticks))
       Die("Presentation failed");
+    YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
+        (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
     if (capture_requested) {
       char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
       unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();

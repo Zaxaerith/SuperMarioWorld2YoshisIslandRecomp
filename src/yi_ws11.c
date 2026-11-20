@@ -26,9 +26,13 @@ typedef struct WsFrameDiagnostic {
   unsigned frame, mode, pause, stage, camera_x, camera_y;
   unsigned ppu_first, ppu_last, main_first, main_last, ui_first, ui_last;
   unsigned gate, tile_cause, failed_line, scenery, wide, cleared;
+  unsigned brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us;
 } WsFrameDiagnostic;
 static WsFrameDiagnostic frame_diagnostic, diagnostic_history[180];
 static unsigned history_next, history_count;
+/* Low-resolution pre-F9 picture history: about 6 MiB, without overlays/accounts. */
+typedef struct WsHistoryImage { uint8_t native[64*56*4],wide[86*56*4]; } WsHistoryImage;
+static WsHistoryImage history_images[180];
 
 static uint8_t pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
 static bool supported, enabled, active, requested;
@@ -362,6 +366,12 @@ static unsigned map_address(const Ppu *p, int x, int y) {
   return address & 0x7fff;
 }
 
+static int render_world_y(const Ppu *p,int y) {
+  /* Mode 2 offset columns wrap through the 11-bit world-grid address.
+   * Do not reject the complete frame when a moving column crosses row 2048. */
+  return PPU_mode(p)==2 ? y&2047 : y;
+}
+
 static bool fill_world_span(Ppu *out, const uint8_t *ram, const uint8_t *gsu,
                             const Cart *cart, int ox, int wy, int line,
                             int begin, int end) {
@@ -372,7 +382,7 @@ static bool fill_world_span(Ppu *out, const uint8_t *ram, const uint8_t *gsu,
     int lx, ly;
     PpuLegacyBgCoordinates(out, 0, x, line, &lx, &ly);
     int wx = ox + lx - out->hScroll[0];
-    int world_y = wy + ly - out->vScroll[0] - line;
+    int world_y = render_world_y(out,wy + ly - out->vScroll[0] - line);
     if (!YiWs11WorldTile(ram, gsu, cart->rom, cart->romSize, wx, world_y, &tile)) return false;
     out->vram[map_address(out, lx, ly)] = tile;
   }
@@ -408,50 +418,44 @@ static void fill_cross_section_span(Ppu *out, const uint8_t *ram, const uint8_t 
  * when the game's global camera clamp still spans the entire level grid.
  * Determine this from the native allocated-screen map, once per field;
  * no room IDs, camera writes or wider object activation are involved. */
-static bool narrow_terrain_component(const uint8_t *ram,const uint8_t *gsu) {
-  unsigned cx=(rd16(ram+0x39)+128u)>>8,cy=(rd16(ram+0x3b)+112u)>>8;
-  if(cx>=16 || cy>=8)return false;
-  unsigned start=cy*16+cx;
-  if(!(gsu[0xcaa+start]&0x3f))return false;
+/* Shared room-map analysis: the component width chooses native 4:3 for
+ * narrow rooms; independently, visible-row boundaries limit added margins. */
+static bool analyze_room_bounds(void) {
+  room_extra_left=room_extra_right=YI_WS_EXTRA;
+  if(tiled_intro())return false;
+  unsigned x=rd16(g_ram+0x39),y=rd16(g_ram+0x3b),cx=(x+128)/256,cy=(y+112)/256;
+  const uint8_t *map=g_snes->cart->ram+0xcaa;
+  if(cx>=16 || cy>=8 || !(map[cy*16+cx]&0x3f))return false;
   uint8_t queue[128],seen[128]={0};unsigned head=0,tail=0,min_x=cx,max_x=cx;
-  queue[tail++]=(uint8_t)start;seen[start]=1;
+  queue[tail++]=(uint8_t)(cy*16+cx);seen[cy*16+cx]=1;
   while(head<tail) {
-    unsigned cell=queue[head++],x=cell&15,y=cell>>4;
-    if(x<min_x)min_x=x;if(x>max_x)max_x=x;
+    unsigned cell=queue[head++],px=cell&15,py=cell>>4;
+    if(px<min_x)min_x=px;if(px>max_x)max_x=px;
     const int dx[]={-1,1,0,0},dy[]={0,0,-1,1};
     for(unsigned i=0;i<4;++i) {
-      int nx=(int)x+dx[i],ny=(int)y+dy[i];
+      int nx=(int)px+dx[i],ny=(int)py+dy[i];
       if(nx<0 || nx>=16 || ny<0 || ny>=8)continue;
       unsigned next=(unsigned)ny*16+(unsigned)nx;
-      if(!seen[next] && (gsu[0xcaa+next]&0x3f)) {
-        seen[next]=1;queue[tail++]=(uint8_t)next;
-      }
+      if(!seen[next] && (map[next]&0x3f)){seen[next]=1;queue[tail++]=(uint8_t)next;}
     }
   }
-  return min_x==max_x;
-}
-
-/* Only extend into allocated room screens. Use the union of the horizontal
- * runs across visible rows: a side is masked only when every row confirms
- * that it lies outside the room. This is presentation-only, not new collision. */
-static void allocated_room_margins(void) {
-  room_extra_left=room_extra_right=YI_WS_EXTRA;
-  if(tiled_intro() || autoscroll_active())return;
-  unsigned x=rd16(g_ram+0x39),y=rd16(g_ram+0x3b),cx=(x+128)/256;
-  if(cx>=16 || y+223>=2048 || x+256>4096)return;
-  const uint8_t *map=g_snes->cart->ram+0xcaa;
+  bool narrow=min_x==max_x;
+  if(autoscroll_active() || y+223>=2048 || x+256>4096)return narrow;
+  /* Union of row runs: only mask where every visible row confirms a void. */
   unsigned left=16,right=0;
   for(unsigned row=y/256;row<=(y+223)/256;++row) {
-    if(!(map[row*16+cx]&0x3f))return; /* No proven local boundary. */
+    if(!(map[row*16+cx]&0x3f))return narrow;
     unsigned lo=cx,hi=cx+1;
     while(lo && (map[row*16+lo-1]&0x3f))--lo;
     while(hi<16 && (map[row*16+hi]&0x3f))++hi;
     if(lo<left)left=lo;if(hi>right)right=hi;
   }
-  if(x<left*256 || x+256>right*256)return;
-  unsigned l=x-left*256,r=right*256-(x+256);
-  if(l<room_extra_left)room_extra_left=l;
-  if(r<room_extra_right)room_extra_right=r;
+  if(x>=left*256 && x+256<=right*256) {
+    unsigned l=x-left*256,r=right*256-(x+256);
+    if(l<room_extra_left)room_extra_left=l;
+    if(r<room_extra_right)room_extra_right=r;
+  }
+  return narrow;
 }
 
 /* Bit positions are printed with named causes below. Scene IDs and header
@@ -566,8 +570,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (!supported || !line || line > YI_WS_HEIGHT) return;
   if (line == 1) {
     ++frames;
-    narrow_component=!tiled_intro() && narrow_terrain_component(g_ram,g_snes->cart->ram);
-    allocated_room_margins();
+    narrow_component=analyze_room_bounds();
     presentation_wide = false;
     left_pixels = right_pixels = left_width = right_width = 0;
     frame_reject = reject_mask(native); frame_tile_reason = 0;
@@ -577,7 +580,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
     frame_diagnostic.pause=g_ram[layout->pause_ram];frame_diagnostic.stage=rd16(g_ram+0x21a);
     frame_diagnostic.camera_x=rd16(g_ram+0x39);frame_diagnostic.camera_y=rd16(g_ram+0x3b);
     frame_diagnostic.ppu_first=native->bgmode;frame_diagnostic.main_first=native->screenEnabled[0];
-    frame_diagnostic.ui_first=ui_scene(native);
+    frame_diagnostic.ui_first=ui_scene(native);frame_diagnostic.brightness_first=native->inidisp;
     if(frame_reject)frame_diagnostic.failed_line=1;
 
     selected = NULL;
@@ -617,7 +620,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       int lx, ly;
       PpuLegacyBgCoordinates(native, 0, x, line, &lx, &ly);
       if (YiWs11WorldTile(g_ram, cart->ram, cart->rom, cart->romSize,
-          ox + lx - native->hScroll[0], wy + ly - native->vScroll[0] - line, &tile) &&
+          ox + lx - native->hScroll[0], render_world_y(native,wy + ly - native->vScroll[0] - line), &tile) &&
           tile == PpuRenderVram(native)[map_address(native, lx, ly)])
         ++matches;
     }
@@ -709,6 +712,21 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
     frame_diagnostic.ppu_last=native->bgmode;frame_diagnostic.main_last=native->screenEnabled[0];
     frame_diagnostic.ui_last=ui_scene(native);frame_diagnostic.gate=frame_reject;
     frame_diagnostic.tile_cause=frame_tile_reason;frame_diagnostic.wide=YiWs11PresentationWide();
+    frame_diagnostic.brightness_last=native->inidisp;frame_diagnostic.oam_match=selected!=NULL;
+    WsHistoryImage *image=&history_images[history_next%180];unsigned luma=0;
+    for(unsigned y=0;y<224;++y)
+      if(memcmp(native->renderBuffer+y*native->renderPitch,pixels+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))++frame_diagnostic.center_changed_lines;
+    for(unsigned y=0;y<56;++y) {
+      for(unsigned x=0;x<64;++x) {
+        const uint8_t *src=native->renderBuffer+(y*4)*native->renderPitch+x*16;
+        uint8_t *dst=image->native+(y*64+x)*4;memcpy(dst,src,4);dst[3]=255;
+        luma+=src[0]+src[1]+src[2];
+      }
+      for(unsigned x=0;x<86;++x) {
+        uint8_t *dst=image->wide+(y*86+x)*4;memcpy(dst,pixels+((y*4)*YI_WS_WIDTH+x*4)*4,4);dst[3]=255;
+      }
+    }
+    frame_diagnostic.native_luma=luma/(64*56*3);
     diagnostic_history[history_next++%180]=frame_diagnostic;if(history_count<180)++history_count;
     if (active) ++frames_wide;
     unsigned end_reject = reject_mask(native);
@@ -735,6 +753,29 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   }
 }
 
+void YiWs11FrameTiming(unsigned emu_us,unsigned draw_us) {
+  if(history_count){WsFrameDiagnostic *d=&diagnostic_history[(history_next-1)%180];d->emu_us=emu_us;d->draw_us=draw_us;}
+}
+static void bmp_word(uint8_t *p,unsigned value) {for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(value>>(i*8));}
+static void write_history_sheet(const char *path,bool wide) {
+  unsigned tile_w=wide?86:64,w=tile_w*12,h=56*((history_count+11)/12),pitch=w*3;
+  if(!h)return;FILE *f=fopen(path,"wb");if(!f)return;
+  uint8_t header[54]={0};header[0]='B';header[1]='M';bmp_word(header+2,54+pitch*h);
+  bmp_word(header+10,54);bmp_word(header+14,40);bmp_word(header+18,w);bmp_word(header+22,h);header[26]=1;header[28]=24;
+  fwrite(header,1,54,f);uint8_t row[1032*3];
+  for(unsigned y=h;y>0;--y) {
+    memset(row,0,pitch);unsigned sy=y-1;
+    for(unsigned column=0;column<12;++column) {
+      unsigned frame=(sy/56)*12+column;if(frame>=history_count)continue;
+      const WsHistoryImage *image=&history_images[(history_next-history_count+frame)%180];
+      const uint8_t *src=(wide?image->wide:image->native)+(sy%56)*tile_w*4;
+      for(unsigned x=0;x<tile_w;++x)memcpy(row+(column*tile_w+x)*3,src+x*4,3);
+    }
+    if(fwrite(row,1,pitch,f)!=pitch)break;
+  }
+  fclose(f);
+}
+
 /* Explicit F9 local evidence only: no ROM, account data or guest execution. */
 void YiWs11CaptureTerrain(const char *path) {
   if (!diagnostic_valid) return;
@@ -753,14 +794,18 @@ void YiWs11CaptureTerrain(const char *path) {
   else snprintf(history_path,sizeof(history_path),"%s-history.csv",path);
   FILE *history=fopen(history_path,"wb");
   if(history) {
-    fprintf(history,"frame,mode,pause,stage,camera_x,camera_y,ppu_first,ppu_last,main_first,main_last,ui_first,ui_last,gate,tile_cause,failed_line,scenery,wide,cleared\n");
+    fprintf(history,"frame,mode,pause,stage,camera_x,camera_y,ppu_first,ppu_last,main_first,main_last,ui_first,ui_last,gate,tile_cause,failed_line,scenery,wide,cleared,brightness_first,brightness_last,oam_match,native_luma,center_changed_lines,emu_us,draw_us\n");
     for(unsigned i=0;i<history_count;++i) {
       const WsFrameDiagnostic *d=&diagnostic_history[(history_next-history_count+i)%180];
-      fprintf(history,"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+      fprintf(history,"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
           d->frame,d->mode,d->pause,d->stage,d->camera_x,d->camera_y,d->ppu_first,d->ppu_last,
-          d->main_first,d->main_last,d->ui_first,d->ui_last,d->gate,d->tile_cause,d->failed_line,d->scenery,d->wide,d->cleared);
+          d->main_first,d->main_last,d->ui_first,d->ui_last,d->gate,d->tile_cause,d->failed_line,d->scenery,d->wide,d->cleared,d->brightness_first,d->brightness_last,d->oam_match,d->native_luma,d->center_changed_lines,d->emu_us,d->draw_us);
     }
     fclose(history);
   }
+  size_t base=length>=suffix && !strcmp(path+length-suffix,"-terrain.bin")?length-suffix:length;
+  snprintf(history_path,sizeof(history_path),"%.*s-history-native.bmp",(int)base,path);write_history_sheet(history_path,false);
+  snprintf(history_path,sizeof(history_path),"%.*s-history-wide.bmp",(int)base,path);write_history_sheet(history_path,true);
+
 
 }
