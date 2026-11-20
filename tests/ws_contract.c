@@ -222,7 +222,23 @@ static int test_ws_detached_composition(void) {
     sram[component_cell+1]=2;
     for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
     TEST_ASSERT(YiWs11Active() && YiWs11PresentationWide(),"a genuinely connected wider room retains its landscape extension");
-    sram[component_cell]=sram[component_cell+1]=0;memcpy(sram_before,sram,sizeof(sram_before));
+    bool left_black=true;
+    for(unsigned y=0;y<224;++y)for(unsigned x=0;x<YI_WS_EXTRA;++x) {
+      const uint8_t *pixel=wide+(y*YI_WS_WIDTH+x)*4;if(pixel[0]||pixel[1]||pixel[2])left_black=false;
+    }
+    TEST_ASSERT(left_black && wide[(YI_WS_WIDTH-1)*4+1]==255,
+        "confirmed left room boundary is black while the right extension stays visible");
+    sram[component_cell-1]=2;sram[component_cell+1]=0;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    bool right_black=true;
+    for(unsigned y=0;y<224;++y)for(unsigned x=YI_WS_EXTRA+256;x<YI_WS_WIDTH;++x) {
+      const uint8_t *pixel=wide+(y*YI_WS_WIDTH+x)*4;if(pixel[0]||pixel[1]||pixel[2])right_black=false;
+    }
+    TEST_ASSERT(YiWs11PresentationWide() && right_black && wide[1]==255,
+        "confirmed right room boundary is black without collapsing 16:9 or hiding the left extension");
+    TEST_ASSERT(!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)) && !memcmp(ram_before,g_ram,sizeof(ram_before)),
+        "room edge masking preserves player, camera and CPU state");
+    sram[component_cell-1]=sram[component_cell]=sram[component_cell+1]=0;memcpy(sram_before,sram,sizeof(sram_before));
     /* Cross-section BG3 is generated from the top-left BG1 word of a
      * Map16 cell, not from whichever old cover occupies the scrolling slot. */
     static Ppu cover_source;

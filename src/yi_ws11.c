@@ -39,6 +39,7 @@ static const WsLayout eu1_layout = {0x7fa24,0x148,0x13,0x4fde8,0x158583,0xd11,0x
 static const WsLayout eu2_layout = {0x7fa24,0x148,0x13,0x4fde8,0x158583,0xd11,0xc1e,0xb11,true,"EU Rev 2"};
 static const WsLayout *layout;
 static bool narrow_component, edge_bounds_verified;
+static unsigned room_extra_left, room_extra_right;
 
 static unsigned frames, captures_seen, frames_wide, tile_failures, sprite_misses;
 static unsigned frame_reject, frame_tile_reason;
@@ -430,6 +431,29 @@ static bool narrow_terrain_component(const uint8_t *ram,const uint8_t *gsu) {
   return min_x==max_x;
 }
 
+/* Only extend into allocated room screens. Use the union of the horizontal
+ * runs across visible rows: a side is masked only when every row confirms
+ * that it lies outside the room. This is presentation-only, not new collision. */
+static void allocated_room_margins(void) {
+  room_extra_left=room_extra_right=YI_WS_EXTRA;
+  if(tiled_intro() || autoscroll_active())return;
+  unsigned x=rd16(g_ram+0x39),y=rd16(g_ram+0x3b),cx=(x+128)/256;
+  if(cx>=16 || y+223>=2048 || x+256>4096)return;
+  const uint8_t *map=g_snes->cart->ram+0xcaa;
+  unsigned left=16,right=0;
+  for(unsigned row=y/256;row<=(y+223)/256;++row) {
+    if(!(map[row*16+cx]&0x3f))return; /* No proven local boundary. */
+    unsigned lo=cx,hi=cx+1;
+    while(lo && (map[row*16+lo-1]&0x3f))--lo;
+    while(hi<16 && (map[row*16+hi]&0x3f))++hi;
+    if(lo<left)left=lo;if(hi>right)right=hi;
+  }
+  if(x<left*256 || x+256>right*256)return;
+  unsigned l=x-left*256,r=right*256-(x+256);
+  if(l<room_extra_left)room_extra_left=l;
+  if(r<room_extra_right)room_extra_right=r;
+}
+
 /* Bit positions are printed with named causes below. Scene IDs and header
  * offsets come from the selected ROM layout. */
 static bool supported_plant_event(const uint8_t *s) {
@@ -543,6 +567,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (line == 1) {
     ++frames;
     narrow_component=!tiled_intro() && narrow_terrain_component(g_ram,g_snes->cart->ram);
+    allocated_room_margins();
     presentation_wide = false;
     left_pixels = right_pixels = left_width = right_width = 0;
     frame_reject = reject_mask(native); frame_tile_reason = 0;
@@ -607,6 +632,8 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       PpuSetExtraSpace(&detached, YI_WS_EXTRA);
       int left = ox - rd16(cart->ram + 0x1e18);
       int right = rd16(cart->ram + 0x1e1a) + 256 - (ox + 256);
+      if(left>(int)room_extra_left)left=room_extra_left;
+      if(right>(int)room_extra_right)right=room_extra_right;
       PpuSetExtraSideSpace(&detached, (tiled_intro() || bonus_scene(native) || ui_scene(native)) ? YI_WS_EXTRA : left, (tiled_intro() || bonus_scene(native) || ui_scene(native)) ? YI_WS_EXTRA : right, 0);
       PpuSetWidescreenWindowExpansion(&detached, 0x3f, 3);
       /* Text/HUD overlays stay in the authoritative 256-column center. */
