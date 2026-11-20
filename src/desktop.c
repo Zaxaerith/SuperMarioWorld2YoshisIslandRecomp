@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "yi_video_effects.h"
+#include "yi_save_indicator.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_presentation.h"
 #include <string.h>
@@ -455,6 +456,8 @@ static void resolve_sram_paths(char *active_path, size_t cap) {
   snprintf(active_path, cap, "saves/save.srm");
 }
 
+static YiSaveIndicator g_save_indicator;
+
 static void load_sram(const char *path) {
   if (!g_sram || g_sram_size <= 0) return;
   FILE *f = fopen(path, "rb");
@@ -463,21 +466,23 @@ static void load_sram(const char *path) {
     fclose(f);
     printf("[SRAM] Loaded %zu bytes from %s\n", n, path);
   }
+  YiSaveIndicatorLoaded(&g_save_indicator,g_sram,(size_t)g_sram_size);
 }
 
 static void save_sram(const char *path) {
   if (!g_sram || g_sram_size <= 0) return;
   ensure_dir_for_file(path);
   FILE *f = fopen(path, "wb");
+  bool success=false;
   if (f) {
-    size_t written = fwrite(g_sram, 1, g_sram_size, f);
-    fclose(f);
-    if (written != (size_t)g_sram_size) {
-      fprintf(stderr, "[SRAM] Warning: Short write to %s (%zu/%d bytes)\n", path, written, g_sram_size);
-    }
+    size_t written=fwrite(g_sram,1,g_sram_size,f);
+    int closed=fclose(f);
+    success=written==(size_t)g_sram_size && closed==0;
+    if(!success)fprintf(stderr,"[SRAM] Error: Failed to finish writing %s\n",path);
   } else {
-    fprintf(stderr, "[SRAM] Error: Failed to open %s for writing!\n", path);
+    fprintf(stderr,"[SRAM] Error: Failed to open %s for writing!\n",path);
   }
+  YiSaveIndicatorWritten(&g_save_indicator,g_sram,(size_t)g_sram_size,success,SDL_GetTicks64());
 }
 
 #ifdef RECOMP_LAUNCHER
@@ -1149,6 +1154,7 @@ int main(int argc, char **argv) {
       YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
       capture_requested = false;
     }
+    YiSaveIndicatorDraw(&g_save_indicator,renderer,SDL_GetTicks64());
     uint64_t present_start=SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer);
     YiPresentTracePresented((unsigned)((SDL_GetPerformanceCounter()-present_start)*1000000/perf_freq));
