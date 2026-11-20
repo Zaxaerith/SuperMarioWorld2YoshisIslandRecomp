@@ -210,6 +210,28 @@ static int test_ws_detached_composition(void) {
                 "captured signed sprites draw in both side margins");
     TEST_ASSERT(!memcmp(&cpu_before, &g_cpu, sizeof(g_cpu)) && !memcmp(ram_before, g_ram, sizeof(ram_before)) &&
                 !memcmp(sram_before, sram, sizeof(sram_before)), "CPU, camera, objects and GSU RAM are unchanged");
+    /* A CPU slice may reach the next field's blank first line before the
+     * host presents. Never expose its cleared/partial construction buffer. */
+    static uint8_t completed_picture[YI_WS_WIDTH*224*4];
+    memcpy(completed_picture,wide,sizeof(completed_picture));
+    g_ppu->inidisp=0x8f;ppu_runLine(g_ppu,1);YiWs11RenderLine(g_ppu,1);
+    TEST_ASSERT(YiWs11PresentationWide() && !memcmp(completed_picture,wide,sizeof(completed_picture)),
+        "starting the next blank field cannot erase the completed picture before presentation");
+    for(unsigned line=2;line<=224;++line){
+      g_ppu->inidisp=15;ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);
+    }
+    bool next_center_equal=true;
+    for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))next_center_equal=false;
+    TEST_ASSERT(next_center_equal && YiWs11PresentationWide(),
+        "the completed next field is published immediately with its original center intact");
+    /* Publishing must not conceal a genuinely completed black transition. */
+    for(unsigned line=1;line<=224;++line){g_ppu->inidisp=0x8f;ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    bool completed_black=true;
+    for(unsigned i=0;i<YI_WS_WIDTH*224;++i)if(wide[i*4]||wide[i*4+1]||wide[i*4+2])completed_black=false;
+    TEST_ASSERT(completed_black,"a completed native black field is published rather than hidden by an old picture");
+    for(unsigned line=1;line<=224;++line){g_ppu->inidisp=15;ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(wide[(100*YI_WS_WIDTH+YI_WS_EXTRA+128)*4+1]==255,
+        "the immediately following completed picture replaces a black field without extra delay");
     /* Global camera clamps can remain 4096 pixels wide for an isolated
      * one-screen room. Its allocated screen component is authoritative. */
     const unsigned component_cell=0xcaa+16+1;
@@ -266,7 +288,8 @@ static int test_ws_detached_composition(void) {
       for(unsigned line=1;line<=224;++line) {
         ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
         if(memcmp(&before,g_ppu,sizeof(before)))preserved=false;
-        if(memcmp(native+(line-1)*256*4,wide+((line-1)*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))preserved=false;
+        if(line==224)for(unsigned y=0;y<224;++y)
+          if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))preserved=false;
       }
       bool covered=kind==1 || kind==2 || kind==4;
       const uint8_t *left=wide+(100*YI_WS_WIDTH)*4;
@@ -307,7 +330,9 @@ static int test_ws_detached_composition(void) {
       bool native_ui=true;
       for(unsigned line=1;line<=224;++line) {
         ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
-        if(memcmp(&before,g_ppu,sizeof(before)) || memcmp(native+(line-1)*256*4,wide+((line-1)*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))native_ui=false;
+        if(memcmp(&before,g_ppu,sizeof(before)))native_ui=false;
+        if(line==224)for(unsigned y=0;y<224;++y)
+          if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))native_ui=false;
       }
       bool margins_black=true;
       for(unsigned y=0;y<224;++y)for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA || x>=YI_WS_EXTRA+256) {
@@ -990,8 +1015,12 @@ static int test_ws_detached_composition(void) {
     memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;
     static uint16_t saved_vram[0x8000];memcpy(saved_vram,g_ppu->vram,sizeof(saved_vram));
     for(unsigned i=0;i<0x8000;++i)g_ppu->vram[i]=0x0100;
-    ppu_runLine(g_ppu,1);before=*g_ppu;YiWs11RenderLine(g_ppu,1);
-    TEST_ASSERT(YiWs11Active()&&wide[1]==255&&!memcmp(&before,g_ppu,sizeof(before))&&
+    bool title_ppu_unchanged=true;
+    for(unsigned line=1;line<=224;++line){
+      ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
+      if(memcmp(&before,g_ppu,sizeof(before)))title_ppu_unchanged=false;
+    }
+    TEST_ASSERT(YiWs11Active()&&title_ppu_unchanged&&wide[1]==255&&!memcmp(&before,g_ppu,sizeof(before))&&
       !memcmp(native,wide+YI_WS_EXTRA*4,256*4),"title Mode7 projection extends with unchanged native center and transform");
     memcpy(g_ppu->vram,saved_vram,sizeof(saved_vram));
     g_ram[0x118]=44;g_ppu->bgmode=0x41;g_ppu->bgXsc[0]=0x6a;g_ppu->bgXsc[1]=0x3a;

@@ -34,7 +34,11 @@ static unsigned history_next, history_count;
 typedef struct WsHistoryImage { uint8_t native[64*56*4],wide[86*56*4]; } WsHistoryImage;
 static WsHistoryImage history_images[180];
 
+/* CPU execution may reach the next scanout before the host presents. Keep
+ * the completed field immutable while its successor clears/builds pixels. */
 static uint8_t pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
+static uint8_t presented_pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
+static bool presented_wide;
 static bool supported, enabled, active, requested;
 typedef struct WsLayout { unsigned table, mode_ram, gameplay_mode, map_anchor, first_sprite, message_ram, autoscroll_ram, pause_ram; bool pal; const char *name; } WsLayout;
 static const WsLayout usa_layout = {0xbf7c3,0x146,0x0f,0x4f9e8,0x168583,0xd0f,0xc1c,0xb0f,false,"USA"};
@@ -250,7 +254,8 @@ static uint16_t player_edge_operand(void *context,const SuperFx *fx,
 }
 void YiWs11Init(YiRomProfile profile) {
   supported = enabled = active = false;
-  presentation_wide = diagnostic_valid = false;
+  presentation_wide = diagnostic_valid = presented_wide = false;
+  memset(presented_pixels,0,sizeof(presented_pixels));
   history_next=history_count=0;
   memset(rooms, 0, sizeof(rooms)); cached_room = -1;
   narrow_component = edge_bounds_verified = false;
@@ -298,15 +303,15 @@ void YiWs11Toggle(void) {
   YiWs11SetEnabled(!requested);
 }
 void YiWs11SetEnabled(bool value) {
-  requested = value; enabled = supported && requested; active = presentation_wide = false;
+  requested = value; enabled = supported && requested; active = presentation_wide = presented_wide = false;
   memset(captures, 0, sizeof(captures)); capture_next = 0; selected = NULL;
   printf("[WS11] User switch: %s\n", enabled ? "enabled" : "native 4:3");
 }
 bool YiWs11Active(void) { return active; }
-bool YiWs11PresentationWide(void) { return active || presentation_wide; }
+bool YiWs11PresentationWide(void) { return enabled && presented_wide; }
 bool YiWs11Supported(void) { return supported; }
 bool YiWs11VerticalActive(void) { return false; }
-const uint8_t *YiWs11Pixels(void) { return pixels; }
+const uint8_t *YiWs11Pixels(void) { return presented_pixels; }
 
 /* Reproduce the guest buffer -> OAM ordering, either with native clipping
  * (for generation matching) or only in the private wider presentation copy. */
@@ -773,6 +778,10 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       presentation_wide = game_transition || goal_transition;
       if (frame_tile_reason && !frame_reject && room_profile()) active = true;
     }
+    /* Publish pixels and geometry together, only after a complete scanout.
+     * This adds no frame delay: the host still receives this field at line224. */
+    memcpy(presented_pixels,pixels,sizeof(pixels));
+    presented_wide=active || presentation_wide;
     frame_diagnostic.ppu_last=native->bgmode;frame_diagnostic.main_last=native->screenEnabled[0];
     frame_diagnostic.ui_last=ui_scene(native);frame_diagnostic.gate=frame_reject;
     frame_diagnostic.tile_cause=frame_tile_reason;frame_diagnostic.wide=YiWs11PresentationWide();
