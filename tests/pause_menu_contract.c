@@ -12,13 +12,16 @@ int main(int argc,char **argv) {
   YiPauseMenu m={0};SDL_Event e=key(SDLK_ESCAPE,true);
   CHECK(YiPauseMenuEvent(&m,r,&e) && !m.open);
   e=key(SDLK_ESCAPE,false);CHECK(YiPauseMenuEvent(&m,r,&e) && m.open && !m.confirm && m.selected==0);
+  e=key(SDLK_F11,false);CHECK(!YiPauseMenuEvent(&m,r,&e) && m.open);
+  e=key(SDLK_RETURN,false);e.key.keysym.mod=KMOD_ALT;CHECK(!YiPauseMenuEvent(&m,r,&e) && m.open);
   Uint8 keys[SDL_NUM_SCANCODES]={0};CHECK(YiPauseMenuBlocksInput(&m,keys,NULL));
   e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.selected==1);
   e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && m.confirm && !m.quit && m.selected==0);
   YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && !m.quit && m.selected==0);
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(!m.open && !m.quit);
   keys[SDL_SCANCODE_ESCAPE]=1;CHECK(YiPauseMenuBlocksInput(&m,keys,NULL));
-  keys[SDL_SCANCODE_ESCAPE]=0;CHECK(!YiPauseMenuBlocksInput(&m,keys,NULL));
+  keys[SDL_SCANCODE_ESCAPE]=0;keys[SDL_SCANCODE_LEFT]=1;CHECK(YiPauseMenuBlocksInput(&m,keys,NULL));
+  keys[SDL_SCANCODE_LEFT]=0;CHECK(!YiPauseMenuBlocksInput(&m,keys,NULL));
   YiPauseMenuOpen(&m,false);e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);
   e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && m.selected==0);

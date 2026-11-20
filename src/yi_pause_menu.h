@@ -36,6 +36,7 @@ static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) 
   if(e->type==SDL_KEYDOWN) {
     if(e->key.repeat)return true;
     SDL_Keycode key=e->key.keysym.sym;
+    if(key==SDLK_F11 || (key==SDLK_RETURN && (e->key.keysym.mod&KMOD_ALT)))return false;
     if(key==SDLK_ESCAPE) {
       if(m->confirm){m->confirm=false;m->selected=0;}
       else {m->open=false;m->release_input=true;}
@@ -70,9 +71,11 @@ static bool YiPauseMenuBlocksInput(YiPauseMenu *m,const Uint8 *keys,SDL_GameCont
   if(m->open)return true;
   if(m->release_input) {
     bool held=keys && (keys[SDL_SCANCODE_ESCAPE] || keys[SDL_SCANCODE_RETURN] || keys[SDL_SCANCODE_SPACE] ||
-                      keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_DOWN]);
+                      keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_RIGHT]);
     if(pad)held|=SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_A) ||
-        SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_B) || SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_START);
+        SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_B) || SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_START) ||
+        SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_DPAD_UP) || SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_DPAD_DOWN) ||
+        SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_DPAD_LEFT) || SDL_GameControllerGetButton(pad,SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
     if(!held)m->release_input=false;
   }
   return m->release_input;
