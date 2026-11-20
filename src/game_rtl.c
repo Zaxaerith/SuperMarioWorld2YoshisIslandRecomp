@@ -2,6 +2,9 @@
  * Advances beam, executes recompiled 65816 / SuperFX, handles NMI/IRQ and PPU scanlines.
  */
 #include "game_rtl.h"
+#ifdef YI_WIDESCREEN_PROTOTYPE
+#include "yi_ws11.h"
+#endif
 #include "common_rtl.h"
 #include "cpu_state.h"
 #include "snes/snes.h"
@@ -25,8 +28,12 @@ uint64_t yi_total_slices;
  * Render at each beam edge, before HDMA installs the next line's state. */
 static void render_scanline(Snes *snes, unsigned line, void *context) {
   (void)context;
-  if (snes->ppu->renderBuffer)
+  if (snes->ppu->renderBuffer) {
     ppu_runLine(snes->ppu, (int)line);
+#ifdef YI_WIDESCREEN_PROTOTYPE
+    YiWs11RenderLine(snes->ppu, line);
+#endif
+  }
 }
 
 static uint32_t vector(uint32_t adr) {

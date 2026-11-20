@@ -6,12 +6,12 @@
 #include "snes.h"
 #include "snes_regs.h"
 
-static void ppu_render_pixel(Ppu *ppu, int x, int y);
+static void ppu_render_pixel(Ppu *ppu, int x, int y, PpuBgCoordinateOverride coordinates, const void *context);
 static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
-                             int *r, int *g, int *b);
-static uint16_t ppu_read_offset(Ppu *ppu, int col, int row);
+                             int *r, int *g, int *b, PpuBgCoordinateOverride coordinates, const void *context);
+static uint16_t ppu_read_offset(const Ppu *ppu, int col, int row);
 static int ppu_sample_bg(Ppu *ppu, int x, int y, int layer, bool priority);
-static void ppu_apply_offset_per_tile(Ppu *ppu, int layer, int *lx, int *ly);
+static void ppu_apply_offset_per_tile(const Ppu *ppu, int layer, int *lx, int *ly);
 static void ppu_prepare_mode7(Ppu *ppu, int y);
 static int ppu_sample_mode7(Ppu *ppu, int x, int layer, bool priority);
 static bool ppu_window_contains(Ppu *ppu, int layer, int x);
@@ -72,16 +72,28 @@ void ppu_draw_whole_line_legacy(Ppu *ppu, int line) {
   int left = -ppu->extraLeftCur;
   int right = 256 + ppu->extraRightCur;
   for (int x = left; x < right; x++) {
-    ppu_render_pixel(ppu, x, line);
+    ppu_render_pixel(ppu, x, line, NULL, NULL);
   }
 }
 
-static void ppu_render_pixel(Ppu *ppu, int x, int y) {
+void ppu_draw_side_margins_legacy(Ppu *ppu, int line) {
+  ppu_draw_side_margins_legacy_with_coordinates(ppu, line, NULL, NULL);
+}
+void ppu_draw_side_margins_legacy_with_coordinates(Ppu *ppu, int line,
+    PpuBgCoordinateOverride coordinates, const void *context) {
+  if (PPU_mode(ppu) == 7) ppu_prepare_mode7(ppu, line);
+  for (int x = -(int)ppu->extraLeftCur; x < 0; ++x)
+    ppu_render_pixel(ppu, x, line, coordinates, context);
+  for (int x = 256; x < 256 + ppu->extraRightCur; ++x)
+    ppu_render_pixel(ppu, x, line, coordinates, context);
+}
+
+static void ppu_render_pixel(Ppu *ppu, int x, int y, PpuBgCoordinateOverride coordinates, const void *context) {
   int r = 0, r2 = 0;
   int g = 0, g2 = 0;
   int b = 0, b2 = 0;
   if (!PPU_forcedBlank(ppu)) {
-    int mainLayer = ppu_resolve_pixel(ppu, x, y, false, &r, &g, &b);
+    int mainLayer = ppu_resolve_pixel(ppu, x, y, false, &r, &g, &b, coordinates, context);
     bool colorWindowState = ppu_window_contains(ppu, 5, x);
     if (
       PPU_clipMode(ppu) == 3 ||
@@ -99,7 +111,7 @@ static void ppu_render_pixel(Ppu *ppu, int x, int y) {
       (PPU_preventMathMode(ppu) == 1 && !colorWindowState)
       );
     if ((mathEnabled && PPU_addSubscreen(ppu)) || PPU_pseudoHires(ppu) || PPU_mode(ppu) == 5 || PPU_mode(ppu) == 6) {
-      secondLayer = ppu_resolve_pixel(ppu, x, y, true, &r2, &g2, &b2);
+      secondLayer = ppu_resolve_pixel(ppu, x, y, true, &r2, &g2, &b2, coordinates, context);
     }
     // TODO: subscreen pixels can be clipped to black as well
     // TODO: math for subscreen pixels (add/sub sub to main)
@@ -138,7 +150,7 @@ static void ppu_render_pixel(Ppu *ppu, int x, int y) {
 }
 
 static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
-                             int *r, int *g, int *b) {
+                             int *r, int *g, int *b, PpuBgCoordinateOverride coordinates, const void *context) {
   // figure out which color is on this location on main- or subscreen, sets it in r, g, b
   // returns which layer it is: 0-3 for bg layer, 4 or 6 for sprites (depending on palette), 5 for backdrop
   int actMode = PPU_mode(ppu) == 1 && PPU_bg3priority(ppu) ? 8 : PPU_mode(ppu);
@@ -178,6 +190,7 @@ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
           if (PPU_mode(ppu) == 2 || PPU_mode(ppu) == 4 || PPU_mode(ppu) == 6) {
             ppu_apply_offset_per_tile(ppu, curLayer, &lx, &ly);
           }
+          if (coordinates) coordinates(ppu, curLayer, x, y, &lx, &ly, context);
           pixel = ppu_sample_bg(
             ppu, lx & 0x3ff, ly & 0x3ff,
             curLayer, curPriority
@@ -244,7 +257,7 @@ static bool ppu_apply_layer_anchor(Ppu *ppu, int layer, int y, bool sub,
   return true;
 }
 
-static void ppu_apply_offset_per_tile(Ppu *ppu, int layer, int *lx, int *ly) {
+static void ppu_apply_offset_per_tile(const Ppu *ppu, int layer, int *lx, int *ly) {
   int x = *lx;
   int y = *ly;
   int column = 0;
@@ -277,7 +290,7 @@ static void ppu_apply_offset_per_tile(Ppu *ppu, int layer, int *lx, int *ly) {
   }
 }
 
-static uint16_t ppu_read_offset(Ppu *ppu, int col, int row) {
+static uint16_t ppu_read_offset(const Ppu *ppu, int col, int row) {
   int x = col * 8 + ppu->hScroll[2];
   int y = row * 8 + ppu->vScroll[2];
   int tileBits = PPU_bigTiles(ppu, 2) ? 4 : 3;
@@ -391,20 +404,32 @@ static int ppu_sample_mode7(Ppu *ppu, int x, int layer, bool priority) {
 
 static bool ppu_window_contains(Ppu *ppu, int layer, int x) {
   uint32 winflags = GET_WINDOW_FLAGS(ppu, layer);
+  int w1l = ppu->window1left, w1r = ppu->window1right;
+  int w2l = ppu->window2left, w2r = ppu->window2right;
+  /* Opt-in host-side expansion, matching the newer compositor. Authentic
+   * width/PPU is unaffected; do not wrap negative X through 8-bit registers. */
+  if (ppu->wsWindowExpandLayers & (1u << layer)) {
+    if ((ppu->wsWindowExpandWindows & 1u) && w1l <= w1r) {
+      w1l -= ppu->extraLeftCur; w1r += ppu->extraRightCur;
+    }
+    if ((ppu->wsWindowExpandWindows & 2u) && w2l <= w2r) {
+      w2l -= ppu->extraLeftCur; w2r += ppu->extraRightCur;
+    }
+  }
 
   if (!(winflags & kWindow1Enabled) && !(winflags & kWindow2Enabled)) {
     return false;
   }
   if ((winflags & kWindow1Enabled) && !(winflags & kWindow2Enabled)) {
-    bool test = x >= ppu->window1left && x <= ppu->window1right;
+    bool test = x >= w1l && x <= w1r;
     return (winflags & kWindow1Inversed) ? !test : test;
   }
   if (!(winflags & kWindow1Enabled) && (winflags & kWindow2Enabled)) {
-    bool test = x >= ppu->window2left && x <= ppu->window2right;
+    bool test = x >= w2l && x <= w2r;
     return (winflags & kWindow2Inversed) ? !test : test;
   }
-  bool test1 = x >= ppu->window1left && x <= ppu->window1right;
-  bool test2 = x >= ppu->window2left && x <= ppu->window2right;
+  bool test1 = x >= w1l && x <= w1r;
+  bool test2 = x >= w2l && x <= w2r;
   if (winflags & kWindow1Inversed) test1 = !test1;
   if (winflags & kWindow2Inversed) test2 = !test2;
   switch (ppu->wbgobjlog >> (layer * 2) & 3) {
@@ -414,4 +439,12 @@ static bool ppu_window_contains(Ppu *ppu, int layer, int x) {
   case 3: return test1 == test2;
   }
   return false;
+}
+
+/* Read-only coordinate lookup shared with detached landscape extensions. */
+void PpuLegacyBgCoordinates(const Ppu *ppu, int layer, int x, int line, int *lx, int *ly) {
+  *lx = x + ppu->hScroll[layer];
+  *ly = line + ppu->vScroll[layer];
+  if (PPU_mode(ppu) == 2)
+    ppu_apply_offset_per_tile(ppu, layer, lx, ly);
 }
