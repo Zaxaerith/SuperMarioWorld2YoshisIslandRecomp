@@ -434,6 +434,29 @@ static int test_ws_detached_composition(void) {
     }
     g_ram[0x118]=0x0f;g_ppu->screenEnabled[0]=0x11;
     fixture_long(sram+0x2600,0x168583); fixture_word(g_ram+0x21a,0);
+    /* Captured menu-exit state: pause19 survives into the level-exit modes.
+     * Non-black backdrop and BG3 ensure stale menu copies cannot hide. */
+    static Ppu exit_source;exit_source=*g_ppu;
+    fixture_long(sram+0x2600,0x168560);fixture_word(g_ram+0x21a,11);fixture_word(g_ram+0x146,5);
+    g_ppu->bgmode=9;g_ppu->bgXsc[2]=0x34;g_ppu->bgTileAdr=0x200;
+    g_ppu->screenEnabled[0]=0x14;g_ppu->screenEnabled[1]=0;g_ppu->cgram[0]=0x7fff;
+    for(unsigned y=0;y<8;++y)g_ppu->vram[0x2008+y]=0xff00;
+    for(unsigned i=0x3400;i<0x3800;++i)g_ppu->vram[i]=0x2001;
+    for(unsigned k=0;k<3;++k){
+      g_ram[0x118]=endings[k];g_ram[0xb0f]=0x13;
+      memcpy(ram_before,g_ram,sizeof(ram_before));memcpy(sram_before,sram,sizeof(sram_before));cpu_before=g_cpu;
+      bool original=true,ppu_unchanged=true;
+      for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);if(memcmp(&before,g_ppu,sizeof(before)))ppu_unchanged=false;}
+      bool black=true;
+      for(unsigned y=0;y<224;++y){
+        if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))original=false;
+        for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA||x>=YI_WS_EXTRA+256){const uint8_t *px=wide+(y*YI_WS_WIDTH+x)*4;if(px[0]||px[1]||px[2])black=false;}
+      }
+      TEST_ASSERT(!strcmp(YiWs11SceneName(),"Centered UI / wide background")&&YiWs11Active()&&YiWs11PresentationWide()&&black,"pause-to-map transition keeps both sides black until menu disappears");
+      TEST_ASSERT(original&&ppu_unchanged&&!memcmp(ram_before,g_ram,sizeof(ram_before))&&!memcmp(sram_before,sram,sizeof(sram_before))&&!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),"exit-menu clipping changes no native pixels, PPU, guest, camera or activation state");
+    }
+    g_ram[0xb0f]=0;*g_ppu=exit_source;
+    fixture_long(sram+0x2600,0x168583);fixture_word(g_ram+0x21a,0);g_ram[0x118]=0x0f;
     /* All known forms share the ordinary terrain path; no guest state writes. */
     for(unsigned form=0;form<=0x12;form+=2) for(unsigned morph=0;morph<=6;++morph) {
       fixture_word(sram+0xae,form); fixture_word(sram+0x14e,morph);

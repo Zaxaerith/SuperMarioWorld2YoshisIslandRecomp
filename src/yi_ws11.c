@@ -129,8 +129,11 @@ static unsigned ui_scene(const Ppu *p) {
   /* Pause keeps the gameplay mode; its region-specific state byte is the
    * state discriminator. Opening/closing can still show live BG1 scenery;
    * only switch the side policy once the menu actually hides that landscape. */
-  if (mode>=layout->gameplay_mode-4 && mode<=layout->gameplay_mode+3 &&
-      g_ram[layout->pause_ram] && PPU_mode(p)==1 &&
+  /* Exit-to-map changes mode before the pause board finishes fading out.
+   * Keep its native-only layers clipped through the shared exit phases too. */
+  bool pause_phase=(mode>=layout->gameplay_mode-4 && mode<=layout->gameplay_mode+3) ||
+      mode==0x1e + shift || mode==0x1f + shift;
+  if (pause_phase && g_ram[layout->pause_ram] && PPU_mode(p)==1 &&
       !((p->screenEnabled[0] | p->screenEnabled[1]) & 1)) return 4;
   if (PPU_mode(p)==7 && (mode==9+shift || mode==10+shift)) return 3;
   if (PPU_mode(p)>1) return 0;
