@@ -2,7 +2,8 @@
 #include <stdio.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);return 1;}}while(0)
 static SDL_Event key(SDL_Keycode k,bool repeat) {
-  SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.sym=k;e.key.repeat=repeat;return e;
+  SDL_Event e;memset(&e,0,sizeof(e));
+  e.type=SDL_KEYDOWN;e.key.keysym.sym=k;e.key.keysym.mod=KMOD_NONE;e.key.repeat=repeat;return e;
 }
 int main(int argc,char **argv) {
   CHECK(SDL_Init(0)==0);
@@ -16,7 +17,7 @@ int main(int argc,char **argv) {
   e=key(SDLK_RETURN,false);e.key.keysym.mod=KMOD_ALT;CHECK(!YiPauseMenuEvent(&m,r,&e) && m.open);
   Uint8 keys[SDL_NUM_SCANCODES]={0};CHECK(YiPauseMenuBlocksInput(&m,keys,NULL));
   e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.selected==1);
-  e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && m.confirm && !m.quit && m.selected==0);
+  e=key(SDLK_RETURN,false);CHECK(e.key.keysym.mod==KMOD_NONE);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && m.confirm && !m.quit && m.selected==0);
   YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && !m.quit && m.selected==0);
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(!m.open && !m.quit);
   keys[SDL_SCANCODE_ESCAPE]=1;CHECK(YiPauseMenuBlocksInput(&m,keys,NULL));
