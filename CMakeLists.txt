@@ -376,3 +376,11 @@ if(YI_BUILD_TESTS AND YI_BUILD_PLAY)
   yi_set_link_options(pause_menu_contract)
   add_test(NAME pause_menu_contract COMMAND pause_menu_contract)
 endif()
+
+# Independent return-to-title lifecycle contract; never executes a game or ROM.
+if(YI_BUILD_TESTS AND WIN32)
+ add_executable(title_restart_contract tests/title_restart_contract.c)
+ target_include_directories(title_restart_contract PRIVATE src)
+ yi_set_link_options(title_restart_contract)
+ add_test(NAME title_restart_contract COMMAND title_restart_contract)
+endif()

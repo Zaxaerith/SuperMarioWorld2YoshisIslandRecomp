@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include "yi_video_effects.h"
 #include "yi_pause_menu.h"
+#include "yi_title_restart.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_presentation.h"
 #include <string.h>
@@ -1060,6 +1061,8 @@ int main(int argc, char **argv) {
   bool capture_requested = false;
   bool running = true;
   YiPauseMenu pause_menu={0};
+  YiTitleRestart title_restart={0};
+  for(int i=1;i<argc;++i)if(!strcmp(argv[i],"--return-to-title"))pause_menu.release_input=true;
   bool menu_audio_paused=false;
   SDL_Event event;
 
@@ -1072,6 +1075,10 @@ int main(int argc, char **argv) {
   while (running) {
     while (SDL_PollEvent(&event)) {
       if(YiPauseMenuEvent(&pause_menu,renderer,&event)) {
+        if(pause_menu.restart) {
+          if(YiTitleRestartReady(&title_restart,chosen_rom_path)){running=false;break;}
+          else {pause_menu.restart=false;SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Restart failed","The game could not be restarted. You can continue playing.",window);}
+        }
         if(pause_menu.quit)running=false;
         continue;
       }
@@ -1200,6 +1207,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  /* Return-to-title reloads the last persisted game save without an extra write. */
+  if(!pause_menu.restart) {
 #ifdef RECOMP_LAUNCHER
   save_sram(g_active_sram_path);
   printf("[SRAM] Saved game state to %s\n", g_active_sram_path);
@@ -1207,6 +1216,7 @@ int main(int argc, char **argv) {
   save_sram("save.srm");
   printf("[SRAM] Saved game state to save.srm\n");
 #endif
+  }
 
   if (s_controller) {
     SDL_GameControllerClose(s_controller);
@@ -1233,6 +1243,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
   cleanup_timer_precision();
 #endif
+  if(pause_menu.restart && !YiTitleRestartFinish(&title_restart))return 1;
   return 0;
 }
 

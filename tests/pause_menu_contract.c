@@ -28,7 +28,7 @@ int main(int argc,char **argv) {
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && m.selected==0);
   SDL_Event close={0};close.type=SDL_QUIT;YiPauseMenuEvent(&m,r,&close);CHECK(m.confirm && !m.quit && m.selected==0);
   e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.quit);
-  YiPauseMenuOpen(&m,false);SDL_Rect panel,buttons[2];int unit;YiPauseMenuLayout(r,&panel,buttons,&unit);
+  YiPauseMenuOpen(&m,false);SDL_Rect panel,buttons[3];int unit;YiPauseMenuLayout(&m,r,&panel,buttons,&unit);
   SDL_Event click={0};click.type=SDL_MOUSEBUTTONDOWN;click.button.button=SDL_BUTTON_LEFT;
   click.button.x=buttons[0].x+2;click.button.y=buttons[0].y+2;
   CHECK(YiPauseMenuEvent(&m,r,&click) && !m.open && !m.quit);
@@ -48,8 +48,18 @@ int main(int argc,char **argv) {
     SDL_RenderPresent(r);
     if(argc>1 && wide){char path[512];snprintf(path,sizeof(path),"%s-menu.bmp",argv[1]);CHECK(SDL_SaveBMP(surface,path)==0);
       m.confirm=true;SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);SDL_SetRenderDrawColor(r,45,110,86,255);SDL_RenderClear(r);
-      YiPauseMenuDraw(&m,r);SDL_RenderPresent(r);snprintf(path,sizeof(path),"%s-confirm.bmp",argv[1]);CHECK(SDL_SaveBMP(surface,path)==0);}
+      YiPauseMenuDraw(&m,r);SDL_RenderPresent(r);snprintf(path,sizeof(path),"%s-confirm.bmp",argv[1]);CHECK(SDL_SaveBMP(surface,path)==0);
+      m.return_confirm=true;SDL_SetRenderDrawColor(r,45,110,86,255);SDL_RenderClear(r);YiPauseMenuDraw(&m,r);SDL_RenderPresent(r);snprintf(path,sizeof(path),"%s-title-confirm.bmp",argv[1]);CHECK(SDL_SaveBMP(surface,path)==0);}
   }
+  // Returning to title is a distinct, confirmed action with Cancel selected.
+  YiPauseMenuOpen(&m,false);e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);
+  e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.confirm&&m.return_confirm&&!m.restart&&!m.quit&&m.selected==0);
+  YiPauseMenuEvent(&m,r,&e);CHECK(!m.confirm&&!m.restart&&!m.quit);
+  e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);
+  e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.restart&&!m.quit);
+  YiPauseMenuOpen(&m,false);e=key(SDLK_UP,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.selected==2);
+  e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.confirm&&!m.return_confirm&&m.selected==0);
+  e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.quit&&!m.restart);
   SDL_DestroyRenderer(r);SDL_FreeSurface(surface);SDL_Quit();
   puts("PASS pause UI: keyboard/mouse/controller, safe defaults, repeat rejection, input release, confirm/cancel and native/wide renderer state.");return 0;
 }
