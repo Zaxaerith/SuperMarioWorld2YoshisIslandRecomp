@@ -57,3 +57,5 @@ Both launcher panels are registered once. VSync On/Off does not change room
 eligibility, source dimensions or region pacing. RA is not included.
 
 When presentation_wide=0, wide.bmp is only a diagnostic buffer and may not be a current valid wide frame. Use info.txt/log plus present.bmp as the authoritative fallback evidence.
+
+Spotlight rooms using level mode 14 share the validated Map16 landscape path. Native lighting windows, color math, room limits and the entire original picture are retained. This is a presentation fix; it does not widen collision, move the camera or change enemy activation. Intro/title and unsupported PPU layouts keep their existing guards.

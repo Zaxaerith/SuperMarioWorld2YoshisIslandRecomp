@@ -153,11 +153,13 @@ static void configure_ui_background(Ppu *p,unsigned kind) {
   p->windowsel=0;p->cgwsel &= 0x3f;
 }
 static bool ordinary_mode(unsigned mode) {
-  /* Mode 3 uses the shared offset-per-tile sampler; 9/10 are special
-   * boss/bitmap modes; 13 uses
-   * large BG1 tiles; 14 includes intro/title layouts. Keep these native. */
+  /* Mode 14 also supplies ordinary spotlight rooms. Its Map16 terrain
+   * uses the same checked sampler; preserve native per-line windows/color math.
+   * Intro/title scenes still require their separate scene/layout guards.
+   * Mode 3 uses offset-per-tile; 9/10 are special boss/bitmap modes,
+   * and 13 uses large BG1 tiles. */
   return mode == 0 || mode == 1 || mode == 2 || mode == 3 || mode == 5 || mode == 6 ||
-      mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 15;
+      mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 14 || mode == 15;
 }
 static bool rom_offset(uint32_t pointer, size_t size, size_t *offset) {
   if (pointer >= 0x400000 && pointer < 0x600000) *offset = pointer - 0x400000;

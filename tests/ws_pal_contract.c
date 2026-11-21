@@ -676,9 +676,10 @@ static int test_ws_detached_composition(void) {
     /* Complete fields in every newly audited room, with PAL Rev2 mode at $0148.
      * Nonzero sprite palettes at $0146 must no longer close the gate. */
     const struct { unsigned stage, pointer, mode; } room_cases[] = {
-      {0, 0x158642, 6}, {1, 0x4ce976, 0}, {1, 0x4cea17, 5}, {0, 0x158583, 5}
+      {0, 0x158642, 6}, {1, 0x4ce976, 0}, {1, 0x4cea17, 5}, {27, 0x510068, 14},
+      {0, 0x158583, 5}
     };
-    for (unsigned k = 0; k < 4; ++k) {
+    for (unsigned k = 0; k < sizeof(room_cases)/sizeof(room_cases[0]); ++k) {
       unsigned pointer = room_cases[k].pointer;
       fixture_word(g_ram + 0x21a, room_cases[k].stage);
       fixture_word(g_ram + 0x148, room_cases[k].mode);
@@ -765,7 +766,7 @@ static int test_ws_detached_composition(void) {
       unsigned obj = entry[0] | (unsigned)entry[1] << 8 | (unsigned)entry[2] << 16;
       unsigned mode = g_snes->cart->rom[obj - 0x400000 + 6] >> 3;
       bool normal = mode == 0 || mode == 1 || mode == 2 || mode == 5 || mode == 6 ||
-          mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 15;
+          mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 14 || mode == 15;
       memcpy(sram + 0x2600, entry + 3, 3);
       fixture_word(g_ram + 0x218, i % 6); fixture_word(g_ram + 0x21a, i % 72);
       fixture_word(g_ram + 0x148, mode);
