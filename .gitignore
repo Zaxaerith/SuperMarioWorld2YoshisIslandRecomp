@@ -80,3 +80,9 @@ __pycache__/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Review-only images and diagnostic bundles: attach to GitHub PRs instead
+/docs/evidence/
+/review-artifacts/
+ws-*.bmp
+effects-*.bmp
