@@ -8,7 +8,7 @@ Active supported autoscrollers move the player's edge limits outward by 43 pixel
 
 Validation: `ws_contract` and `ws_pal_contract` use synthetic cartridges and require no game ROM. Both are registered with CTest. To check a supplied ROM's layout without executing it, use `ws_contract --layout-only "path/to/ROM.sfc"`. These checks do not replace gameplay testing.
 
-Contributor-reported USA gameplay reaches **2-8 inclusive with no visible issues reported** after the room-edge, moving-column and completed-picture fixes. See [fixes and before/after evidence](evidence/WIDESCREEN_REVIEW.md). Complete-game or all-region compatibility is not claimed.
+Contributor-reported USA gameplay reaches **2-8 inclusive with no visible issues reported** after the room-edge, moving-column and completed-picture fixes. See [archived fixes and before/after evidence](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/blob/a42ff191ad5e2d091c11bb43514eff4f8861aa00/docs/evidence/WIDESCREEN_REVIEW.md). Complete-game or all-region compatibility is not claimed.
 
 ## Exposed edges, collisions and fallback policy
 
@@ -44,7 +44,7 @@ the final presented image is the aspect-ratio reference. Keep the matching log.
 F8 changes view for live comparison. Capture both sides of a scene transition.
 
 Current evidence and remaining checks are in the
-[review matrix and paired gallery](evidence/WIDESCREEN_REVIEW.md): 38 USA and
+[archived review matrix and paired gallery](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/blob/a42ff191ad5e2d091c11bb43514eff4f8861aa00/docs/evidence/WIDESCREEN_REVIEW.md): 38 USA and
 13 PAL capture groups, 32 active-wide centers RGB-identical, USA progress through
 1-8, left autoscroll edge, post-defeat boss arena and representative PAL 1-1.
 Right-edge crush is contributor-confirmed in both views. Current-build active
@@ -58,4 +58,6 @@ eligibility, source dimensions or region pacing. RA is not included.
 
 When presentation_wide=0, wide.bmp is only a diagnostic buffer and may not be a current valid wide frame. Use info.txt/log plus present.bmp as the authoritative fallback evidence.
 
-Spotlight rooms using level mode 14 share the validated Map16 landscape path. Native lighting windows, color math, room limits and the entire original picture are retained. This is a presentation fix; it does not widen collision, move the camera or change enemy activation. Intro/title and unsupported PPU layouts keep their existing guards.
+The large review screenshots and diagnostic captures have been removed from current
+`main` to keep the source tree lean. They remain available in the linked historic
+commit. New captures should be attached to PR discussions rather than committed.
