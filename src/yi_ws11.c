@@ -209,7 +209,9 @@ static void load_room_profiles(const Cart *cart) {
 }
 static const RoomProfile *room_profile(void) {
   if (!g_snes || !g_snes->cart || !g_snes->cart->ram ||
-      g_snes->cart->ramSize < 0x8000 || rd16(g_ram + 0x218) >= 6 ||
+      /* The original game stores world * 2 (0,2,...,10), not 0..5. */
+      g_snes->cart->ramSize < 0x8000 || rd16(g_ram + 0x218) > 10 ||
+      (rd16(g_ram + 0x218) & 1u) ||
       (rd16(g_ram + 0x21a) >= 72 && !tiled_intro())) return NULL;
   uint32_t sprites = rd24(g_snes->cart->ram + 0x2600);
   if (cached_room >= 0 && rooms[cached_room].valid && rooms[cached_room].sprites == sprites)

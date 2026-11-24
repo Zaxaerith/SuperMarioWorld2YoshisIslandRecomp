@@ -848,7 +848,7 @@ static int test_ws_detached_composition(void) {
       bool normal = mode == 0 || mode == 1 || mode == 2 || mode == 5 || mode == 6 ||
           mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 14 || mode == 15;
       memcpy(sram + 0x2600, entry + 3, 3);
-      fixture_word(g_ram + 0x218, i % 6); fixture_word(g_ram + 0x21a, i % 72);
+      fixture_word(g_ram + 0x218, (i % 6) * 2); fixture_word(g_ram + 0x21a, i % 72);
       fixture_word(g_ram + 0x146, mode);
       YiWs11RenderLine(g_ppu, 1);
       TEST_ASSERT(YiWs11Active() == normal, "all ROM-derived room slots apply normal/special layout policy across six worlds");
@@ -856,7 +856,7 @@ static int test_ws_detached_composition(void) {
       TEST_ASSERT(!YiWs11Active(), "ROM-derived room rejects a stale/mismatched live header");
     }
     fixture_word(g_ram + 0x146, 5); fixture_long(sram + 0x2600, 0x168583);
-    fixture_word(g_ram + 0x218, 5); fixture_word(g_ram + 0x21a, 71);
+    fixture_word(g_ram + 0x218, 10); fixture_word(g_ram + 0x21a, 71);
     bool general_preserved = true;
     for (unsigned line = 1; line <= 224; ++line) {
       ppu_runLine(g_ppu, line); before = *g_ppu;
@@ -865,8 +865,27 @@ static int test_ws_detached_composition(void) {
     }
     TEST_ASSERT(general_preserved, "general world policy does not mutate native PPU");
     TEST_ASSERT(YiWs11Active(), "normal complete field supports final world and global stage range");
-    fixture_word(g_ram + 0x218, 6); YiWs11RenderLine(g_ppu, 1);
-    TEST_ASSERT(!YiWs11Active(), "invalid world is excluded");
+    /* Native world values are even table offsets. Check complete frames in
+     * every world, including the captured world-4 value 6, without guest writes. */
+    for (unsigned world = 0; world < 6; ++world) {
+      fixture_word(g_ram + 0x218, world * 2);
+      memcpy(ram_before, g_ram, sizeof(ram_before));
+      memcpy(sram_before, sram, sizeof(sram_before)); cpu_before = g_cpu;
+      bool native_unchanged = true;
+      for (unsigned line = 1; line <= 224; ++line) {
+        ppu_runLine(g_ppu, line); before = *g_ppu;
+        YiWs11RenderLine(g_ppu, line);
+        if (memcmp(&before, g_ppu, sizeof(before))) native_unchanged = false;
+      }
+      TEST_ASSERT(YiWs11Active() && YiWs11PresentationWide(), "all six encoded worlds retain complete widescreen fields");
+      TEST_ASSERT(native_unchanged && !memcmp(ram_before, g_ram, sizeof(ram_before)) &&
+          !memcmp(sram_before, sram, sizeof(sram_before)) && !memcmp(&cpu_before, &g_cpu, sizeof(g_cpu)),
+          "world eligibility changes no native PPU, camera, activation or guest state");
+    }
+    fixture_word(g_ram + 0x218, 12); YiWs11RenderLine(g_ppu, 1);
+    TEST_ASSERT(!YiWs11Active(), "out-of-range encoded world is excluded");
+    fixture_word(g_ram + 0x218, 1); YiWs11RenderLine(g_ppu, 1);
+    TEST_ASSERT(!YiWs11Active(), "odd world table offset is excluded");
     fixture_word(g_ram + 0x218, 0); fixture_word(g_ram + 0x21a, 72); YiWs11RenderLine(g_ppu, 1);
     TEST_ASSERT(!YiWs11Active(), "invalid stage is excluded");
     g_ram[0x21a] = 0; sram[0x2600] ^= 1; YiWs11RenderLine(g_ppu, 1);
