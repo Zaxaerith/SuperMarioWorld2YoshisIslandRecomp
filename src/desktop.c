@@ -13,6 +13,7 @@
 #include "yi_pause_menu.h"
 #include "yi_title_restart.h"
 #include "yi_menu_game_input.h"
+#include "yi_save_indicator.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_presentation.h"
 #include <string.h>
@@ -458,6 +459,8 @@ static void resolve_sram_paths(char *active_path, size_t cap) {
   snprintf(active_path, cap, "saves/save.srm");
 }
 
+static YiSaveIndicator g_save_indicator;
+
 static void load_sram(const char *path) {
   if (!g_sram || g_sram_size <= 0) return;
   FILE *f = fopen(path, "rb");
@@ -466,21 +469,23 @@ static void load_sram(const char *path) {
     fclose(f);
     printf("[SRAM] Loaded %zu bytes from %s\n", n, path);
   }
+  YiSaveIndicatorLoaded(&g_save_indicator,g_sram,(size_t)g_sram_size);
 }
 
 static void save_sram(const char *path) {
   if (!g_sram || g_sram_size <= 0) return;
   ensure_dir_for_file(path);
   FILE *f = fopen(path, "wb");
+  bool success=false;
   if (f) {
-    size_t written = fwrite(g_sram, 1, g_sram_size, f);
-    fclose(f);
-    if (written != (size_t)g_sram_size) {
-      fprintf(stderr, "[SRAM] Warning: Short write to %s (%zu/%d bytes)\n", path, written, g_sram_size);
-    }
+    size_t written=fwrite(g_sram,1,g_sram_size,f);
+    int closed=fclose(f);
+    success=written==(size_t)g_sram_size && closed==0;
+    if(!success)fprintf(stderr,"[SRAM] Error: Failed to finish writing %s\n",path);
   } else {
-    fprintf(stderr, "[SRAM] Error: Failed to open %s for writing!\n", path);
+    fprintf(stderr,"[SRAM] Error: Failed to open %s for writing!\n",path);
   }
+  YiSaveIndicatorWritten(&g_save_indicator,g_sram,(size_t)g_sram_size,success,SDL_GetTicks64());
 }
 
 #ifdef RECOMP_LAUNCHER
@@ -1086,6 +1091,7 @@ int main(int argc, char **argv) {
           if(YiTitleRestartReady(reset_save,s_rom_profile)) {
             g_audiobuffer_cur=g_audiobuffer_end=g_audiobuffer;
             YiWs11Init(s_rom_profile);
+            YiSaveIndicatorLoaded(&g_save_indicator,g_sram,(size_t)g_sram_size);
             menu_game_input=(YiMenuGameInput){0};
             pause_menu=(YiPauseMenu){.release_input=true};
             next_frame_time=SDL_GetPerformanceCounter();
@@ -1162,7 +1168,8 @@ int main(int argc, char **argv) {
     YiPresentTraceRecord(renderer,source,source_width,224,source_width*4,wide,g_video_effect);
     YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
         (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
-    /* F9 records the real visible host menu, including confirmation. */
+    /* F9 captures the completed save feedback and pause overlay. */
+    YiSaveIndicatorDraw(&g_save_indicator,renderer,SDL_GetTicks64());
     YiPauseMenuDraw(&pause_menu,renderer);
     if (capture_requested) {
       char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
