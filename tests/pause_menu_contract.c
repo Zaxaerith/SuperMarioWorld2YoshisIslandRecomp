@@ -27,8 +27,7 @@ int main(int argc,char **argv) {
   YiPauseMenuOpen(&m,false);e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);
   e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && m.selected==0);
-  SDL_Event close={0};close.type=SDL_QUIT;YiPauseMenuEvent(&m,r,&close);CHECK(m.confirm && !m.quit && m.selected==0);
-  e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.quit);
+  SDL_Event close={0};close.type=SDL_QUIT;YiPauseMenuEvent(&m,r,&close);CHECK(m.quit && !m.restart && !m.exit_level);
   YiPauseMenuOpen(&m,false);SDL_Rect panel,buttons[4];int unit;YiPauseMenuLayout(&m,r,&panel,buttons,&unit);
   SDL_Event click={0};click.type=SDL_MOUSEBUTTONDOWN;click.button.button=SDL_BUTTON_LEFT;
   click.button.x=buttons[0].x+2;click.button.y=buttons[0].y+2;
@@ -77,6 +76,9 @@ int main(int argc,char **argv) {
   YiPauseMenuActivate(&m);CHECK(m.open&&!m.exit_level&&!m.confirm);
   m.can_exit_level=true;YiPauseMenuActivate(&m);
   CHECK(!m.open&&m.exit_level&&m.release_input&&!m.restart&&!m.quit);
+  // OS close must quit immediately even from a nested restart confirmation.
+  YiPauseMenuOpen(&m,false);m.confirm=true;m.return_confirm=true;m.restart=true;
+  YiPauseMenuEvent(&m,r,&close);CHECK(m.quit&&!m.restart&&!m.exit_level);
   SDL_DestroyRenderer(r);SDL_FreeSurface(surface);SDL_Quit();
   puts("PASS pause UI: keyboard/mouse/controller, safe defaults, repeat rejection, input release, confirm/cancel and native/wide renderer state.");return 0;
 }

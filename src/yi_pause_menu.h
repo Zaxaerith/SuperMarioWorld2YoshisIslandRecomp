@@ -34,7 +34,7 @@ static void YiPauseMenuLayout(const YiPauseMenu *m,SDL_Renderer *r,SDL_Rect *pan
   for(int i=0;i<YiPauseMenuButtonCount(m);++i)buttons[i]=(SDL_Rect){panel->x+8*u,panel->y+((m->confirm&&m->return_confirm?51:27)+21*i)*u,pw-16*u,17*u};
 }
 static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) {
-  if(e->type==SDL_QUIT){YiPauseMenuOpen(m,true);return true;}
+  if(e->type==SDL_QUIT){m->quit=true;m->restart=false;m->exit_level=false;return true;}
   if(!m->open) {
     if(e->type==SDL_KEYDOWN && e->key.keysym.sym==SDLK_ESCAPE) {
       if(!e->key.repeat)YiPauseMenuOpen(m,false);

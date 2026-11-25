@@ -1,6 +1,6 @@
 # Host pause menu
 
-Esc opens **Continue**, **Restart game**, **Exit level**, and **Quit**. Continue is selected by default. Restart game and Quit require confirmation with Cancel selected first. Window-close requests use Quit confirmation. Restart game warns that progress since the last save will be lost; see [reset behavior](RETURN_TO_TITLE.md).
+Esc opens **Continue**, **Restart game**, **Exit level**, and **Quit**. Continue is selected by default. Restart game and Quit require confirmation with Cancel selected first. Alt + F4 and the window close button exit immediately through the normal shutdown/save path; only the menu Quit action asks for confirmation. Restart game warns that progress since the last save will be lost; see [reset behavior](RETURN_TO_TITLE.md).
 
 **Exit level** performs the same action as **Start + Select** in the original game. It is enabled only when the original game permits Start + Select: a cleared level, with native pause available. New levels, maps, dialogue and disabled player states keep it greyed out. It sends released input followed by Start + Select and release, leaving the original game to perform its normal exit. It does not change completion flags or directly change game mode.
 
