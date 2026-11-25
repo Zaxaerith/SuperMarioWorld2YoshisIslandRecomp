@@ -10,6 +10,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "yi_video_effects.h"
+#include "yi_pause_menu.h"
+#include "yi_title_restart.h"
+#include "yi_menu_game_input.h"
 #include "yi_save_indicator.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_presentation.h"
@@ -1063,6 +1066,9 @@ int main(int argc, char **argv) {
 
   bool capture_requested = false;
   bool running = true;
+  YiPauseMenu pause_menu={0};
+  YiMenuGameInput menu_game_input={0};
+  bool menu_audio_paused=false;
   SDL_Event event;
 
   const uint64_t perf_freq = SDL_GetPerformanceFrequency();
@@ -1072,10 +1078,34 @@ int main(int argc, char **argv) {
   printf("[Game] Entering %.3f Hz scanline execution loop...\n", YiRomFrameRate(s_rom_profile));
 
   while (running) {
+    pause_menu.can_exit_level=YiMenuCanExitLevel(g_ram,g_sram,s_rom_profile);
     while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        running = false;
-      } else if (event.type == SDL_KEYDOWN) {
+      if(YiPauseMenuEvent(&pause_menu,renderer,&event)) {
+        if(pause_menu.restart) {
+          if(audio_dev)SDL_PauseAudioDevice(audio_dev,1);
+#ifdef RECOMP_LAUNCHER
+          const char *reset_save=g_active_sram_path;
+#else
+          const char *reset_save="save.srm";
+#endif
+          if(YiTitleRestartReady(reset_save,s_rom_profile)) {
+            g_audiobuffer_cur=g_audiobuffer_end=g_audiobuffer;
+            YiWs11Init(s_rom_profile);
+            YiSaveIndicatorLoaded(&g_save_indicator,g_sram,(size_t)g_sram_size);
+            menu_game_input=(YiMenuGameInput){0};
+            pause_menu=(YiPauseMenu){.release_input=true};
+            next_frame_time=SDL_GetPerformanceCounter();
+            menu_audio_paused=true;
+          } else {
+            pause_menu.restart=false;
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Reset failed","The saved game could not be read. You can continue playing.",window);
+          }
+        }
+        if(pause_menu.exit_level){menu_game_input.exit_ticks=6;pause_menu.exit_level=false;}
+        if(pause_menu.quit)running=false;
+        continue;
+      }
+      if (event.type == SDL_KEYDOWN) {
 #ifdef RECOMP_LAUNCHER
         if (YiEffectKeyDown(&g_video_effect,g_effect_hotkey,event.key.keysym.sym,
             event.key.repeat != 0,(event.key.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) != 0)) {
@@ -1083,9 +1113,7 @@ int main(int argc, char **argv) {
           continue;
         }
 #endif
-        if (event.key.keysym.sym == SDLK_ESCAPE) {
-          running = false;
-        } else if (event.key.keysym.sym == SDLK_F9 && !event.key.repeat) {
+        if (event.key.keysym.sym == SDLK_F9 && !event.key.repeat) {
           capture_requested = true;
         } else if (event.key.keysym.sym == SDLK_F8 && !event.key.repeat) {
           YiWs11Toggle();
@@ -1111,13 +1139,23 @@ int main(int argc, char **argv) {
       }
     }
 
+    if(!running)break;
+    if(menu_audio_paused!=pause_menu.open) {
+      menu_audio_paused=pause_menu.open;
+      if(audio_dev)SDL_PauseAudioDevice(audio_dev,menu_audio_paused?1:0);
+      if(!menu_audio_paused)next_frame_time=SDL_GetPerformanceCounter();
+    }
     const uint8_t *key_states = SDL_GetKeyboardState(NULL);
-    update_keyboard(key_states);
+    if(YiPauseMenuBlocksInput(&pause_menu,key_states,s_controller))s_pad_state=0;
+    else update_keyboard(key_states);
 
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
     uint64_t emulation_start=SDL_GetPerformanceCounter();
-    RtlRunFrame(s_pad_state);
-    GameDrawPpuFrame();
+    if(!pause_menu.open) {
+      s_pad_state=YiMenuGameInputNext(&menu_game_input,s_pad_state);
+      RtlRunFrame(s_pad_state);
+      GameDrawPpuFrame();
+    }
     uint64_t emulation_end=SDL_GetPerformanceCounter();
 
     /* Present active viewport */
@@ -1130,8 +1168,9 @@ int main(int argc, char **argv) {
     YiPresentTraceRecord(renderer,source,source_width,224,source_width*4,wide,g_video_effect);
     YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
         (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
-    /* F9 presentation captures must show the actual on-screen write result. */
+    /* F9 captures the completed save feedback and pause overlay. */
     YiSaveIndicatorDraw(&g_save_indicator,renderer,SDL_GetTicks64());
+    YiPauseMenuDraw(&pause_menu,renderer);
     if (capture_requested) {
       char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
       unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
@@ -1162,13 +1201,15 @@ int main(int argc, char **argv) {
     YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
-    if (++s_frame_save_counter % 300 == 0) {
+    if (!pause_menu.open && ++s_frame_save_counter % 300 == 0) {
 #ifdef RECOMP_LAUNCHER
       save_sram(g_active_sram_path);
 #else
       save_sram("save.srm");
 #endif
     }
+
+    if(pause_menu.open){SDL_Delay(16);continue;}
 
     /* Pace frames for the selected ROM region. */
     next_frame_time += (uint64_t)target_frame_cycles;
@@ -1192,6 +1233,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  /* Return-to-title reloads the last persisted game save without an extra write. */
+  if(!pause_menu.restart) {
 #ifdef RECOMP_LAUNCHER
   save_sram(g_active_sram_path);
   printf("[SRAM] Saved game state to %s\n", g_active_sram_path);
@@ -1199,6 +1242,7 @@ int main(int argc, char **argv) {
   save_sram("save.srm");
   printf("[SRAM] Saved game state to save.srm\n");
 #endif
+  }
 
   if (s_controller) {
     SDL_GameControllerClose(s_controller);
@@ -1225,6 +1269,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
   cleanup_timer_precision();
 #endif
+
   return 0;
 }
 

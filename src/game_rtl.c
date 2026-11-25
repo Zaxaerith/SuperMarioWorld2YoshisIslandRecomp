@@ -179,3 +179,11 @@ uint32_t GameGetResumePc(void) {
   return resume_pc;
 }
 
+
+void GameMachineReset(YiRomProfile profile) {
+  cpu_state_init(&g_cpu, g_ram);
+  interp_bridge_set_master_deadline(0);
+  interp_bridge_reset_dynamic_cache();
+  RtlReset(1);
+  GameConfigureRom(profile);
+}
