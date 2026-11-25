@@ -6,6 +6,6 @@ The original game still decides when progress enters its cartridge save. The exi
 
 The ROM-free contract covers changed/unchanged data, initial zero/erased SRAM, mixed valid/uninitialized slots, backup fallback, transient invalid checksums, actual write failure/recovery and unchanged source/renderer state.
 
-Real-game acceptance: start a normal empty slot; complete a stage and return to the world map; observe SAVED; quit and restart; verify that the stage progress loads. This test is still pending for the revised implementation.
+Real-game acceptance: start a normal empty slot; complete a stage and return to the world map; observe SAVED; quit and restart; verify that the stage progress loads. Europe Rev. 2 gameplay verification confirmed the 1-1 write notification and retained progress after quitting and restarting. On the fresh test install, the first intro write initialized the empty slots; it did not save an intro checkpoint.
 
 Review images and gameplay results belong in the [PR #12 discussion](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/pull/12), not in the source tree. Historical rendered previews are not evidence of a real save event.
