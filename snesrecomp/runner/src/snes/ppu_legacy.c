@@ -406,6 +406,10 @@ static bool ppu_window_contains(Ppu *ppu, int layer, int x) {
   uint32 winflags = GET_WINDOW_FLAGS(ppu, layer);
   int w1l = ppu->window1left, w1r = ppu->window1right;
   int w2l = ppu->window2left, w2r = ppu->window2right;
+  /* A hardware endpoint at 0/255 denotes the viewport edge. Keep this
+   * consistent with the newer compositor without stretching interior masks. */
+  PpuWidescreenAdjustPinnedWindowEdges(-(int)ppu->extraLeftCur,
+      256 + ppu->extraRightCur, &w1l, &w1r, &w2l, &w2r);
   /* Opt-in host-side expansion, matching the newer compositor. Authentic
    * width/PPU is unaffected; do not wrap negative X through 8-bit registers. */
   if (ppu->wsWindowExpandLayers & (1u << layer)) {
