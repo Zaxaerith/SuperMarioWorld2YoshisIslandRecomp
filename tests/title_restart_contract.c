@@ -40,14 +40,43 @@ int main(void){
   CHECK(!GameGetResumePc() && RtlStateGeneration()==generation+1);
   CHECK(g_snes->pal==(bool)YiRomIsPal((YiRomProfile)profile));
   for(unsigned i=0;i<0x20000;++i)CHECK(g_ram[i]==0);
-  unsigned shift=YiRomIsPal((YiRomProfile)profile)?4:0;
-  g_ram[0x118]=15+shift;g_ram[0x21a]=0;g_sram[0x1fea]=g_sram[0x1ae]=g_sram[0x1b0]=g_sram[0xac]=0;
+  /* Literal native layouts, independently verified in each ROM's pause/exit
+   * handler: USA $01:C0D9; EU0 $01:C271; EU1/EU2 $01:C27A. */
+  static const unsigned native[][5]={
+    {15,0xb0f,0xd0f,0xb65,0xb59},
+    {19,0xb11,0xd11,0xb67,0xb5b},
+    {19,0xb11,0xd11,0xb67,0xb5b},
+    {19,0xb11,0xd11,0xb67,0xb5b}};
+  const unsigned *layout=native[profile];
+  unsigned pause=layout[1],dialogue=layout[2];
+  g_ram[0x118]=layout[0];g_ram[0x21a]=0;
+  g_sram[0x1fea]=g_sram[0x1ae]=g_sram[0x1b0]=g_sram[0xac]=0;
   CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
-  g_ram[0x222]=0x80;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  g_ram[0x222]=0x80;g_ram[pause]=1;
+  CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));g_ram[pause]=0;
   g_ram[0x222]=0xe4;CHECK(YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
-  g_ram[0xd0f]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));g_ram[0xd0f]=0;
-  g_sram[0x1ae]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));g_sram[0x1ae]=0;
-  g_ram[0x118]=0x22+shift;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  g_ram[dialogue]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  g_ram[pause]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  g_ram[dialogue]=g_ram[pause]=0;
+  for(unsigned flag=3;flag<5;++flag){
+    g_ram[layout[flag]]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+    g_ram[layout[flag]]=0;
+  }
+  g_sram[0x1ae]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  if(profile!=YI_ROM_US_10){
+    // A stale USA pause byte must not bypass the real PAL pause blockers.
+    g_ram[0xb0f]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));g_ram[0xb0f]=0;
+  }
+  g_ram[pause]=1;CHECK(YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+  g_ram[pause]=0;g_sram[0x1ae]=0;
+  if(profile!=YI_ROM_US_10){
+    // Unrelated bytes at the USA offsets must not disable a valid PAL exit.
+    g_ram[0xd0f]=g_ram[0xb65]=g_ram[0xb59]=1;
+    CHECK(YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
+    g_ram[0xd0f]=g_ram[0xb65]=g_ram[0xb59]=0;
+  }
+  g_ram[0x118]=0x22+(profile!=YI_ROM_US_10?4:0);
+  CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
   YiMenuGameInput input={.exit_ticks=6};
   for(unsigned i=0;i<6;++i)CHECK(YiMenuGameInputNext(&input,0xffff)==(i>=2&&i<4?12:0));
   CHECK(YiMenuGameInputNext(&input,0x123)==0x123);
