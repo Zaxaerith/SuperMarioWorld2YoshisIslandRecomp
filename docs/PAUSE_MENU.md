@@ -1,6 +1,6 @@
 # Host pause menu
 
-Esc opens **Continue**, **Return to title**, **Exit level**, and **Quit**. Continue is selected by default. Return to title and Quit require confirmation with Cancel selected first. Window-close requests use Quit confirmation. Return to title warns that progress since the last save will be lost; see [reset behavior](RETURN_TO_TITLE.md).
+Esc opens **Continue**, **Restart game**, **Exit level**, and **Quit**. Continue is selected by default. Restart game and Quit require confirmation with Cancel selected first. Window-close requests use Quit confirmation. Restart game warns that progress since the last save will be lost; see [reset behavior](RETURN_TO_TITLE.md).
 
 **Exit level** performs the same action as **Start + Select** in the original game. It is enabled only when the original game permits Start + Select: a cleared level, with native pause available. New levels, maps, dialogue and disabled player states keep it greyed out. It sends released input followed by Start + Select and release, leaving the original game to perform its normal exit. It does not change completion flags or directly change game mode.
 
@@ -10,4 +10,4 @@ The overlay preserves renderer state. Camera, enemy activation, filtering and na
 
 Synthetic tests check navigation, disabled actions, confirmation, input release, renderer-state preservation and the reset/input lifecycle across all four ROM profiles. Review images belong in the [PR #11 discussion](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/pull/11), not in the source tree.
 
-Player testing confirmed that Return to title restarts in the same window and Exit level works only in completed levels. The automatic Start input used in that test has since been removed; the player now advances the intro manually.
+Player testing confirmed that Restart game restarts in the same window and Exit level works only in completed levels. The automatic Start input used in that test has since been removed; the player now advances the intro manually.

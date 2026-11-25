@@ -1,4 +1,4 @@
-# Return to title
+# Restart game
 
 The confirmed action resets the emulated machine in the current process and reloads the last persisted SRAM. The window, renderer, controller, audio device and launcher stay open. It makes no extra save write. A failed save read leaves the paused game resumable.
 

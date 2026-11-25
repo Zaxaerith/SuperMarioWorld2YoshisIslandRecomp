@@ -119,7 +119,7 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
   SDL_Rect inside={panel.x+2*u,panel.y+2*u,panel.w-4*u,panel.h-4*u};
   SDL_SetRenderDrawColor(r,18,62,45,255);SDL_RenderFillRect(r,&inside);
   SDL_SetRenderDrawColor(r,245,243,209,255);
-  YiPauseMenuText(r,m->confirm?(m->return_confirm?"RETURN TO TITLE?":"QUIT GAME?"):"PAUSE",panel.x+panel.w/2,panel.y+8*u,m->confirm?u:SDL_max(1,3*u/2));
+  YiPauseMenuText(r,m->confirm?(m->return_confirm?"RESTART GAME?":"QUIT GAME?"):"PAUSE",panel.x+panel.w/2,panel.y+8*u,m->confirm?u:SDL_max(1,3*u/2));
   if(m->confirm&&m->return_confirm) {
     YiPauseMenuText(r,"PROGRESS SINCE LAST SAVE",panel.x+panel.w/2,panel.y+24*u,u);
     YiPauseMenuText(r,"WILL BE LOST",panel.x+panel.w/2,panel.y+35*u,u);
@@ -131,7 +131,7 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
     SDL_SetRenderDrawColor(r,i==m->selected?255:100,i==m->selected?220:128,i==m->selected?115:100,255);
     SDL_RenderDrawRect(r,&buttons[i]);
     SDL_SetRenderDrawColor(r,disabled?105:255,disabled?120:255,disabled?110:235,255);
-    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RETURN TO TITLE":"QUIT"):"CANCEL"):(i==0?"CONTINUE":i==1?"RETURN TO TITLE":i==2?"EXIT LEVEL":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
+    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RESTART GAME":"QUIT"):"CANCEL"):(i==0?"CONTINUE":i==1?"RESTART GAME":i==2?"EXIT LEVEL":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
   }
   SDL_SetRenderDrawColor(r,185,204,179,255);
   YiPauseMenuText(r,m->confirm?"ESC: CANCEL":"ESC: CONTINUE",panel.x+panel.w/2,panel.y+panel.h-9*u,SDL_max(1,u/2));
