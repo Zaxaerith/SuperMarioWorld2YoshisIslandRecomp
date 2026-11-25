@@ -434,6 +434,29 @@ static int test_ws_detached_composition(void) {
     }
     g_ram[0x118]=0x13;g_ppu->screenEnabled[0]=0x11;
     fixture_long(sram+0x2600,0x158583); fixture_word(g_ram+0x21a,0);
+    /* Captured menu-exit state: pause19 survives into the level-exit modes.
+     * Non-black backdrop and BG3 ensure stale menu copies cannot hide. */
+    static Ppu exit_source;exit_source=*g_ppu;
+    fixture_long(sram+0x2600,0x158560);fixture_word(g_ram+0x21a,11);fixture_word(g_ram+0x148,5);
+    g_ppu->bgmode=9;g_ppu->bgXsc[2]=0x34;g_ppu->bgTileAdr=0x200;
+    g_ppu->screenEnabled[0]=0x14;g_ppu->screenEnabled[1]=0;g_ppu->cgram[0]=0x7fff;
+    for(unsigned y=0;y<8;++y)g_ppu->vram[0x2008+y]=0xff00;
+    for(unsigned i=0x3400;i<0x3800;++i)g_ppu->vram[i]=0x2001;
+    for(unsigned k=0;k<3;++k){
+      g_ram[0x118]=endings[k];g_ram[0xb11]=0x13;
+      memcpy(ram_before,g_ram,sizeof(ram_before));memcpy(sram_before,sram,sizeof(sram_before));cpu_before=g_cpu;
+      bool original=true,ppu_unchanged=true;
+      for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);if(memcmp(&before,g_ppu,sizeof(before)))ppu_unchanged=false;}
+      bool black=true;
+      for(unsigned y=0;y<224;++y){
+        if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))original=false;
+        for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA||x>=YI_WS_EXTRA+256){const uint8_t *px=wide+(y*YI_WS_WIDTH+x)*4;if(px[0]||px[1]||px[2])black=false;}
+      }
+      TEST_ASSERT(!strcmp(YiWs11SceneName(),"Centered UI / wide background")&&YiWs11Active()&&YiWs11PresentationWide()&&black,"pause-to-map transition keeps both sides black until menu disappears");
+      TEST_ASSERT(original&&ppu_unchanged&&!memcmp(ram_before,g_ram,sizeof(ram_before))&&!memcmp(sram_before,sram,sizeof(sram_before))&&!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),"exit-menu clipping changes no native pixels, PPU, guest, camera or activation state");
+    }
+    g_ram[0xb11]=0;*g_ppu=exit_source;
+    fixture_long(sram+0x2600,0x158583);fixture_word(g_ram+0x21a,0);g_ram[0x118]=0x13;
     /* All known forms share the ordinary terrain path; no guest state writes. */
     for(unsigned form=0;form<=0x12;form+=2) for(unsigned morph=0;morph<=6;++morph) {
       fixture_word(sram+0xae,form); fixture_word(sram+0x14e,morph);
@@ -449,13 +472,93 @@ static int test_ws_detached_composition(void) {
     }
     g_ram[0x118]=0x13; fixture_word(g_ram+0xd11,9);
     g_ppu->windowsel=0x220222; g_ppu->screenWindowed[0]=g_ppu->screenWindowed[1]=0x1f;
-    g_ppu->window1left=0;g_ppu->window1right=255;g_ppu->cgwsel=0x40;
+    g_ppu->window1left=48;g_ppu->window1right=207;g_ppu->cgwsel=0x40;
+    uint16_t hud_xy=g_ppu->oam[0],hud_tile=g_ppu->oam[1];uint8_t hud_high=g_ppu->highOam[0];
+    g_ppu->oam[0]=232|(79<<8);g_ppu->oam[1]=0x3002;g_ppu->highOam[0]=(hud_high&~3u)|3u;
     for(unsigned line=1;line<=224;++line) { ppu_runLine(g_ppu,line); YiWs11RenderLine(g_ppu,line); }
     TEST_ASSERT(YiWs11Active() && wide[1]>0 && wide[(YI_WS_EXTRA+256)*4+1]>0,
       "dialog masks never create a black bar at either added viewport edge");
     bool dialog_native=true;
     for(unsigned y=0;y<224;++y) if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4)) dialog_native=false;
     TEST_ASSERT(dialog_native,"dialog mask correction preserves entire original center");
+    TEST_ASSERT(wide[(39*YI_WS_WIDTH+YI_WS_EXTRA-24)*4+2]==255&&wide[(39*YI_WS_WIDTH+YI_WS_EXTRA+270)*4+2]==255,
+      "dialogues retain scene sprites across both original viewport edges");
+    TEST_ASSERT(wide[(79*YI_WS_WIDTH+YI_WS_EXTRA-24)*4+1]==255,
+      "fixed HUD slots remain hidden in added margins while scene OBJ is retained");
+    g_ppu->oam[0]=hud_xy;g_ppu->oam[1]=hud_tile;g_ppu->highOam[0]=hud_high;
+    /* A dialogue window must not erase scanline clipping of scene BG2.
+     * A high-priority blue BG2 is visible above the waterline and masked below. */
+    static Ppu dialog_saved;
+    dialog_saved=*g_ppu;
+    g_ppu->bgXsc[1]=0x79; g_ppu->bgTileAdr=0;
+    g_ppu->screenEnabled[0]=3; g_ppu->screenEnabled[1]=0;
+    g_ppu->screenWindowed[0]=2; g_ppu->screenWindowed[1]=0;
+    g_ppu->windowsel=0x80; g_ppu->cgwsel=0;
+    g_ppu->cgram[2]=0x7c00;
+    for(unsigned i=0x7800;i<0x8000;++i)g_ppu->vram[i]=0x2002;
+    const unsigned dialog_tiles[]={2,3,18,19};
+    for(unsigned t=0;t<4;++t)for(unsigned i=0;i<8;++i)g_ppu->vram[dialog_tiles[t]*16+i]=0xff00;
+    uint16_t ghost_state=sram[0xf04]|sram[0xf05]<<8,ghost_id=sram[0x1364]|sram[0x1365]<<8;
+    for(unsigned scene_mask=2;scene_mask<=4;++scene_mask){
+    fixture_word(sram+0xf04,scene_mask==4?16:0);fixture_word(sram+0x1364,scene_mask==4?0x193:ghost_id);
+    g_ppu->screenWindowed[0]=scene_mask==4?2:scene_mask;
+    g_ppu->windowsel=scene_mask==3?0x88:0x80;
+    bool dialog_scene_unchanged=true,dialog_center_equal=true;
+    for(unsigned line=1;line<=224;++line){
+      g_ppu->window2left=line<112?255:0;
+      g_ppu->window2right=line<112?0:255;
+      ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
+      if(memcmp(&before,g_ppu,sizeof(before)))dialog_scene_unchanged=false;
+    }
+    for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))dialog_center_equal=false;
+    for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA||x>=YI_WS_EXTRA+256){
+      const uint8_t *top=wide+(79*YI_WS_WIDTH+x)*4;
+      const uint8_t *bottom=wide+(159*YI_WS_WIDTH+x)*4;
+      TEST_ASSERT((top[0]>0&&top[1]==0) && bottom[0]==0 && (scene_mask==3?bottom[1]==0:bottom[1]>0),
+        "dialogue preserves BG1/BG2 scanline water masking in both added margins");
+    }
+    TEST_ASSERT(dialog_scene_unchanged&&dialog_center_equal,"dialogue BG2 clipping preserves live PPU and every native center pixel");
+    }
+    fixture_word(sram+0xf04,ghost_state);fixture_word(sram+0x1364,ghost_id);
+    /* Interior dialog windows must not grow into added columns and expose
+     * the fixed-color fallback instead of the scene subscreen. */
+    g_ppu->screenEnabled[0]=1;g_ppu->screenEnabled[1]=2;
+    g_ppu->screenWindowed[0]=0;g_ppu->screenWindowed[1]=2;
+    g_ppu->windowsel=0x80;g_ppu->fixedColor=0x7fff;g_ppu->cgwsel=2;g_ppu->cgadsub=1;
+    const unsigned dialog_edges[][2]={{55,214},{42,201}};
+    for(unsigned edge=0;edge<2;++edge){
+      g_ppu->window2left=dialog_edges[edge][0];g_ppu->window2right=dialog_edges[edge][1];
+      for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+      bool clean=true;for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA||x>=YI_WS_EXTRA+256){
+        const uint8_t *p=wide+(80*YI_WS_WIDTH+x)*4;if(!p[0]||!p[1]||p[2])clean=false;}
+      TEST_ASSERT(clean,"interior dialogue window never creates a white fixed-color stripe at either viewport edge");
+    }
+    g_ppu->window2left=0;g_ppu->window2right=255;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(wide[(80*YI_WS_WIDTH)*4+2]>0&&wide[(80*YI_WS_WIDTH+341)*4+2]>0,
+      "viewport-pinned full-screen windows still cover both additional sides");
+    *g_ppu=dialog_saved;
+    static Ppu water_saved;water_saved=*g_ppu;
+    g_ppu->bgmode=0x69;g_ppu->screenEnabled[0]=5;g_ppu->screenEnabled[1]=0;
+    g_ppu->screenWindowed[0]=g_ppu->screenWindowed[1]=0;g_ppu->windowsel=0;g_ppu->cgwsel=0;
+    g_ppu->bgXsc[2]=0x58;g_ppu->bgTileAdr=0x400;g_ppu->hScroll[2]=5;g_ppu->vScroll[2]=0;
+    g_ppu->cgram[2]=0x7c00;
+    for(unsigned row=0;row<32;++row)for(unsigned x=0;x<32;++x)g_ppu->vram[0x5800+row*32+x]=x<17?0x2002:0x2005;
+    g_ppu->vram[0x5804]=0x2005; /* a nonperiodic counter/board row */
+    for(unsigned t=0;t<2;++t)for(unsigned y=0;y<8;++y)g_ppu->vram[0x4000+(2+t)*8+y]=0xff00;
+    for(unsigned t=0;t<2;++t)for(unsigned y=0;y<8;++y)g_ppu->vram[0x4000+(18+t)*8+y]=0xff00;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(wide[(160*YI_WS_WIDTH)*4]>0&&wide[(160*YI_WS_WIDTH+341)*4]>0,
+      "periodic native water extends to both edges instead of exposing offscreen map garbage");
+    TEST_ASSERT(wide[(8*YI_WS_WIDTH)*4]==0&&wide[(8*YI_WS_WIDTH)*4+1]>0,
+      "nonperiodic dialog/counter rows never repeat into margins");
+    for(unsigned i=0x5800;i<0x5c00;++i)g_ppu->vram[i]=0x2002; /* visible bitmap outside native columns */
+    fixture_word(sram+0xf04,16);fixture_word(sram+0x1364,0x193);fixture_word(g_ram+0xd11,0);
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(wide[(160*YI_WS_WIDTH)*4]>0&&wide[(160*YI_WS_WIDTH+341)*4]>0,
+      "active sewer ghost retains its visible BG3 surface in both margins");
+    fixture_word(sram+0xf04,ghost_state);fixture_word(sram+0x1364,ghost_id);fixture_word(g_ram+0xd11,9);
+    *g_ppu=water_saved;
     g_ppu->windowsel=0;g_ppu->screenWindowed[0]=g_ppu->screenWindowed[1]=0;g_ppu->cgwsel=0;
     fixture_word(g_ram+0xd11,0);
     /* A host picture-memory view must be respected on visible lines.
@@ -653,9 +756,10 @@ static int test_ws_detached_composition(void) {
     /* Complete fields in every newly audited room, with PAL Rev2 mode at $0148.
      * Nonzero sprite palettes at $0146 must no longer close the gate. */
     const struct { unsigned stage, pointer, mode; } room_cases[] = {
-      {0, 0x158642, 6}, {1, 0x4ce976, 0}, {1, 0x4cea17, 5}, {0, 0x158583, 5}
+      {0, 0x158642, 6}, {1, 0x4ce976, 0}, {1, 0x4cea17, 5}, {27, 0x510068, 14},
+      {0, 0x158583, 5}
     };
-    for (unsigned k = 0; k < 4; ++k) {
+    for (unsigned k = 0; k < sizeof(room_cases)/sizeof(room_cases[0]); ++k) {
       unsigned pointer = room_cases[k].pointer;
       fixture_word(g_ram + 0x21a, room_cases[k].stage);
       fixture_word(g_ram + 0x148, room_cases[k].mode);
@@ -742,9 +846,9 @@ static int test_ws_detached_composition(void) {
       unsigned obj = entry[0] | (unsigned)entry[1] << 8 | (unsigned)entry[2] << 16;
       unsigned mode = g_snes->cart->rom[obj - 0x400000 + 6] >> 3;
       bool normal = mode == 0 || mode == 1 || mode == 2 || mode == 5 || mode == 6 ||
-          mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 15;
+          mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 14 || mode == 15;
       memcpy(sram + 0x2600, entry + 3, 3);
-      fixture_word(g_ram + 0x218, i % 6); fixture_word(g_ram + 0x21a, i % 72);
+      fixture_word(g_ram + 0x218, (i % 6) * 2); fixture_word(g_ram + 0x21a, i % 72);
       fixture_word(g_ram + 0x148, mode);
       YiWs11RenderLine(g_ppu, 1);
       TEST_ASSERT(YiWs11Active() == normal, "all ROM-derived room slots apply normal/special layout policy across six worlds");
@@ -752,7 +856,7 @@ static int test_ws_detached_composition(void) {
       TEST_ASSERT(!YiWs11Active(), "ROM-derived room rejects a stale/mismatched live header");
     }
     fixture_word(g_ram + 0x148, 5); fixture_long(sram + 0x2600, 0x158583);
-    fixture_word(g_ram + 0x218, 5); fixture_word(g_ram + 0x21a, 71);
+    fixture_word(g_ram + 0x218, 10); fixture_word(g_ram + 0x21a, 71);
     bool general_preserved = true;
     for (unsigned line = 1; line <= 224; ++line) {
       ppu_runLine(g_ppu, line); before = *g_ppu;
@@ -761,8 +865,27 @@ static int test_ws_detached_composition(void) {
     }
     TEST_ASSERT(general_preserved, "general world policy does not mutate native PPU");
     TEST_ASSERT(YiWs11Active(), "normal complete field supports final world and global stage range");
-    fixture_word(g_ram + 0x218, 6); YiWs11RenderLine(g_ppu, 1);
-    TEST_ASSERT(!YiWs11Active(), "invalid world is excluded");
+    /* Native world values are even table offsets. Check complete frames in
+     * every world, including the captured world-4 value 6, without guest writes. */
+    for (unsigned world = 0; world < 6; ++world) {
+      fixture_word(g_ram + 0x218, world * 2);
+      memcpy(ram_before, g_ram, sizeof(ram_before));
+      memcpy(sram_before, sram, sizeof(sram_before)); cpu_before = g_cpu;
+      bool native_unchanged = true;
+      for (unsigned line = 1; line <= 224; ++line) {
+        ppu_runLine(g_ppu, line); before = *g_ppu;
+        YiWs11RenderLine(g_ppu, line);
+        if (memcmp(&before, g_ppu, sizeof(before))) native_unchanged = false;
+      }
+      TEST_ASSERT(YiWs11Active() && YiWs11PresentationWide(), "all six encoded worlds retain complete widescreen fields");
+      TEST_ASSERT(native_unchanged && !memcmp(ram_before, g_ram, sizeof(ram_before)) &&
+          !memcmp(sram_before, sram, sizeof(sram_before)) && !memcmp(&cpu_before, &g_cpu, sizeof(g_cpu)),
+          "world eligibility changes no native PPU, camera, activation or guest state");
+    }
+    fixture_word(g_ram + 0x218, 12); YiWs11RenderLine(g_ppu, 1);
+    TEST_ASSERT(!YiWs11Active(), "out-of-range encoded world is excluded");
+    fixture_word(g_ram + 0x218, 1); YiWs11RenderLine(g_ppu, 1);
+    TEST_ASSERT(!YiWs11Active(), "odd world table offset is excluded");
     fixture_word(g_ram + 0x218, 0); fixture_word(g_ram + 0x21a, 72); YiWs11RenderLine(g_ppu, 1);
     TEST_ASSERT(!YiWs11Active(), "invalid stage is excluded");
     g_ram[0x21a] = 0; sram[0x2600] ^= 1; YiWs11RenderLine(g_ppu, 1);
@@ -1014,6 +1137,33 @@ static int test_ws_detached_composition(void) {
 
     }
     g_ram[0x118]=14;g_ppu->bgmode=7;g_ppu->screenEnabled[0]=1;
+    static Ppu title_sky_saved;title_sky_saved=*g_ppu;
+    g_ppu->bgmode=0x10;g_ppu->screenEnabled[0]=3;g_ppu->screenEnabled[1]=0;
+    g_ppu->bgXsc[0]=0x60;g_ppu->bgTileAdr=0;
+    g_ppu->windowsel=0;g_ppu->screenWindowed[0]=0;
+    g_ppu->hScroll[0]=g_ppu->vScroll[0]=0;
+    for(unsigned i=0x6000;i<0x6400;++i)g_ppu->vram[i]=1;
+    const unsigned skytiles[]={1,2,17,18};
+    for(unsigned t=0;t<4;++t)for(unsigned y=0;y<8;++y)g_ppu->vram[skytiles[t]*8+y]=0xff;
+    bool sky_native_equal=true;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))sky_native_equal=false;
+    TEST_ASSERT(YiWs11Active()&&sky_native_equal&&wide[(80*YI_WS_WIDTH)*4+1]>0&&wide[(80*YI_WS_WIDTH+341)*4+1]>0,
+      "tiled title sky extends both sides before Mode7 ocean without replacing center");
+    g_ppu->bgmode=0x41;g_ppu->screenEnabled[0]=7;g_ppu->bgXsc[2]=0x60;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(YiWs11Active()&&wide[(80*YI_WS_WIDTH)*4+1]>0&&wide[(80*YI_WS_WIDTH+341)*4+1]>0,
+      "file-select sky uses BG3 in both margins while its board remains centered");
+    uint8_t saved_components[256];memcpy(saved_components,sram+0xcaa,256);memset(sram+0xcaa,0x80,256);sram[0xcaa+17]=1;
+    fixture_word(g_ram+0x39,256);fixture_word(g_ram+0x3b,256);
+    g_ram[0x118]=35;g_ppu->bgmode=0x10;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(YiWs11PresentationWide(),"confirming a file keeps wide geometry despite stale narrow room data");
+    g_ram[0x118]=36;
+    for(unsigned line=1;line<=224;++line){g_ppu->bgmode=line<112?6:1;ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    TEST_ASSERT(YiWs11PresentationWide(),"mixed loading field after file selection never shrinks to native geometry");
+    memcpy(sram+0xcaa,saved_components,256);g_ram[0x118]=14;
+    *g_ppu=title_sky_saved;
     memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;
     static uint16_t saved_vram[0x8000];memcpy(saved_vram,g_ppu->vram,sizeof(saved_vram));
     for(unsigned i=0;i<0x8000;++i)g_ppu->vram[i]=0x0100;
@@ -1025,6 +1175,16 @@ static int test_ws_detached_composition(void) {
     TEST_ASSERT(YiWs11Active()&&title_ppu_unchanged&&wide[1]==255&&!memcmp(&before,g_ppu,sizeof(before))&&
       !memcmp(native,wide+YI_WS_EXTRA*4,256*4),"title Mode7 projection extends with unchanged native center and transform");
     memcpy(g_ppu->vram,saved_vram,sizeof(saved_vram));
+    static Ppu iris_saved;iris_saved=*g_ppu;
+    g_ram[0x118]=19;g_ppu->bgmode=0x69;g_ppu->screenEnabled[0]=0x14;g_ppu->screenEnabled[1]=0x10;
+    g_ppu->windowsel=0xa8ffff;g_ppu->bgXsc[0]=0x69;
+    for(unsigned line=1;line<=224;++line){ppu_runLine(g_ppu,line);YiWs11RenderLine(g_ppu,line);}
+    bool iris_black=true,iris_center=true;
+    for(unsigned y=0;y<224;++y){if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))iris_center=false;
+      for(unsigned x=0;x<YI_WS_WIDTH;++x)if(x<YI_WS_EXTRA||x>=YI_WS_EXTRA+256){const uint8_t *p=wide+(y*YI_WS_WIDTH+x)*4;if(p[0]||p[1]||p[2])iris_black=false;}}
+    TEST_ASSERT(YiWs11PresentationWide()&&iris_black&&iris_center,"native keyhole finish keeps only its unchanged center, no side scenery");
+    *g_ppu=iris_saved;
+
     g_ram[0x118]=48;g_ppu->bgmode=0x41;g_ppu->bgXsc[0]=0x6a;g_ppu->bgXsc[1]=0x3a;
     /* Same unloaded-row symptom in a completely different scene and region:
      * BG3 wraps to a conflicting row inside the synthetic lower extension. */

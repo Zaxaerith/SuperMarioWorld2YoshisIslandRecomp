@@ -30,6 +30,11 @@ typedef struct WsFrameDiagnostic {
 } WsFrameDiagnostic;
 static WsFrameDiagnostic frame_diagnostic, diagnostic_history[180];
 static unsigned history_next, history_count;
+/* Compact native per-line registers for F9: raster effects cannot be
+ * reconstructed from the single line-112 PPU snapshot alone. */
+typedef struct WsRasterDiagnostic { unsigned value[26]; } WsRasterDiagnostic;
+static WsRasterDiagnostic raster_current[224],raster_presented[224];
+
 /* Low-resolution pre-F9 picture history: about 6 MiB, without overlays/accounts. */
 typedef struct WsHistoryImage { uint8_t native[64*56*4],wide[86*56*4]; } WsHistoryImage;
 static WsHistoryImage history_images[180];
@@ -38,7 +43,7 @@ static WsHistoryImage history_images[180];
  * the completed field immutable while its successor clears/builds pixels. */
 static uint8_t pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
 static uint8_t presented_pixels[YI_WS_WIDTH * YI_WS_HEIGHT * 4];
-static bool presented_wide;
+static bool presented_wide, title_route;
 static bool supported, enabled, active, requested;
 typedef struct WsLayout { unsigned table, mode_ram, gameplay_mode, map_anchor, first_sprite, message_ram, autoscroll_ram, pause_ram; bool pal; const char *name; } WsLayout;
 static const WsLayout usa_layout = {0xbf7c3,0x146,0x0f,0x4f9e8,0x168583,0xd0f,0xc1c,0xb0f,false,"USA"};
@@ -129,9 +134,16 @@ static unsigned ui_scene(const Ppu *p) {
   /* Pause keeps the gameplay mode; its region-specific state byte is the
    * state discriminator. Opening/closing can still show live BG1 scenery;
    * only switch the side policy once the menu actually hides that landscape. */
-  if (mode>=layout->gameplay_mode-4 && mode<=layout->gameplay_mode+3 &&
-      g_ram[layout->pause_ram] && PPU_mode(p)==1 &&
+  /* Exit-to-map changes mode before the pause board finishes fading out.
+   * Keep its native-only layers clipped through the shared exit phases too. */
+  bool pause_phase=(mode>=layout->gameplay_mode-4 && mode<=layout->gameplay_mode+3) ||
+      mode==0x1e + shift || mode==0x1f + shift;
+  if (pause_phase && g_ram[layout->pause_ram] && PPU_mode(p)==1 &&
       !((p->screenEnabled[0] | p->screenEnabled[1]) & 1)) return 4;
+  /* A native iris/keyhole replaces the scene, including its side scenery. */
+  if(mode>=layout->gameplay_mode && mode<=layout->gameplay_mode+3 &&
+      PPU_mode(p)==1 && !((p->screenEnabled[0]|p->screenEnabled[1])&3u) &&
+      (p->screenEnabled[0]&4u) && (p->windowsel&0xffffu)==0xffffu) return 5;
   if (PPU_mode(p)==7 && (mode==9+shift || mode==10+shift)) return 3;
   if (PPU_mode(p)>1) return 0;
   if (mode>=0x20+shift && mode<=0x29+shift) return 2;
@@ -143,18 +155,27 @@ static unsigned ui_scene(const Ppu *p) {
 }
 static void configure_ui_background(Ppu *p,unsigned kind) {
   if(kind==3) return; /* Native Mode7 projection over the complete map. */
-  unsigned layers = (kind==2 || kind==4) ? 0u : (PPU_bgTilemapWider(p,1)?2u:0u);
+  unsigned layers = (kind==2 || kind==4 || kind==5) ? 0u : (PPU_bgTilemapWider(p,1)?2u:0u);
+  unsigned shift=layout->pal?4u:0u,mode=g_ram[0x118];
+  /* Title sky uses BG1 in Mode0, then BG3 behind the Mode1 file board.
+   * Continue sky only; the board/logo stay in the authoritative center. */
+  if(kind==1 && (mode==9+shift || mode==10+shift)) {
+    if(PPU_mode(p)==0)layers=1u;
+    if(PPU_mode(p)==1)layers=4u; /* File-select board uses BG1/2; sky is BG3. */
+  }
   p->screenEnabled[0] &= layers;
   p->screenEnabled[1] &= layers;
   p->screenWindowed[0]=p->screenWindowed[1]=0;
   p->windowsel=0;p->cgwsel &= 0x3f;
 }
 static bool ordinary_mode(unsigned mode) {
-  /* Mode 3 uses the shared offset-per-tile sampler; 9/10 are special
-   * boss/bitmap modes; 13 uses
-   * large BG1 tiles; 14 includes intro/title layouts. Keep these native. */
+  /* Mode 14 also supplies ordinary spotlight rooms. Its Map16 terrain
+   * uses the same checked sampler; preserve native per-line windows/color math.
+   * Intro/title scenes still require their separate scene/layout guards.
+   * Mode 3 uses offset-per-tile; 9/10 are special boss/bitmap modes,
+   * and 13 uses large BG1 tiles. */
   return mode == 0 || mode == 1 || mode == 2 || mode == 3 || mode == 5 || mode == 6 ||
-      mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 15;
+      mode == 7 || mode == 8 || mode == 11 || mode == 12 || mode == 14 || mode == 15;
 }
 static bool rom_offset(uint32_t pointer, size_t size, size_t *offset) {
   if (pointer >= 0x400000 && pointer < 0x600000) *offset = pointer - 0x400000;
@@ -188,7 +209,9 @@ static void load_room_profiles(const Cart *cart) {
 }
 static const RoomProfile *room_profile(void) {
   if (!g_snes || !g_snes->cart || !g_snes->cart->ram ||
-      g_snes->cart->ramSize < 0x8000 || rd16(g_ram + 0x218) >= 6 ||
+      /* The original game stores world * 2 (0,2,...,10), not 0..5. */
+      g_snes->cart->ramSize < 0x8000 || rd16(g_ram + 0x218) > 10 ||
+      (rd16(g_ram + 0x218) & 1u) ||
       (rd16(g_ram + 0x21a) >= 72 && !tiled_intro())) return NULL;
   uint32_t sprites = rd24(g_snes->cart->ram + 0x2600);
   if (cached_room >= 0 && rooms[cached_room].valid && rooms[cached_room].sprites == sprites)
@@ -254,7 +277,7 @@ static uint16_t player_edge_operand(void *context,const SuperFx *fx,
 }
 void YiWs11Init(YiRomProfile profile) {
   supported = enabled = active = false;
-  presentation_wide = diagnostic_valid = presented_wide = false;
+  presentation_wide = diagnostic_valid = presented_wide = title_route = false;
   memset(presented_pixels,0,sizeof(presented_pixels));
   history_next=history_count=0;
   memset(rooms, 0, sizeof(rooms)); cached_room = -1;
@@ -467,6 +490,7 @@ static bool fill_world_span(Ppu *out, const uint8_t *ram, const uint8_t *gsu,
  * That GSU routine is byte-identical in all four supported ROM revisions. */
 static void fill_cross_section_span(Ppu *out, const uint8_t *ram, const uint8_t *gsu,
                                    const Cart *cart, int line, int begin, int end) {
+  if(rd16(ram+layout->message_ram)&&((out->screenEnabled[0]|out->screenEnabled[1])&4u))return;
   /* BG3 tileset is eight bytes before the selected region's level mode. */
   if (rd16(ram+layout->mode_ram-8)!=0x0a || PPU_mode(out)!=1 ||
       !PPU_bigTiles(out,2) || tiled_intro() || bonus_scene(out) || ui_scene(out)) return;
@@ -628,12 +652,48 @@ static bool original_band_is_black(unsigned begin, unsigned end) {
 }
 /* Dialog UI stays native. Apply the same detached backdrop policy to sides
  * and upper corners; native PPU/window state is never changed. */
-static void configure_dialog_backdrop(Ppu *p) {
-  p->screenWindowed[0] = p->screenWindowed[1] = 0;
-  p->windowsel = 0;
+static unsigned background_word(const Ppu *p,unsigned layer,int x,int y) {
+  unsigned shift=PPU_bigTiles(p,layer)?4:3;
+  unsigned tx=(unsigned)x>>shift,ty=(unsigned)y>>shift;
+  unsigned address=PPU_bgTilemapAdr(p,layer)+((ty&31)<<5)+(tx&31);
+  if((tx&32)&&PPU_bgTilemapWider(p,layer))address+=0x400;
+  if((ty&32)&&PPU_bgTilemapHigher(p,layer))address+=PPU_bgTilemapWider(p,layer)?0x800:0x400;
+  return address&0x7fff;
+}
+/* Reuse only a pattern verified over the complete native BG3 row. Text,
+ * counters and board edges break that periodicity and remain center-only. */
+static bool continue_dialog_scene_row(Ppu *p,unsigned line) {
+  if(!((p->screenEnabled[0]|p->screenEnabled[1])&4u)||PPU_mode(p)!=1)return false;
+  unsigned size=PPU_bigTiles(p,2)?16u:8u,phase=p->hScroll[2]&(size-1);
+  unsigned count=(256+phase+size-1)/size,period=0;uint16_t row[33];
+  for(unsigned i=0;i<count;++i)row[i]=p->vram[background_word(p,2,(p->hScroll[2]&~(size-1))+i*size,line+p->vScroll[2])];
+  for(unsigned n=1;n<=8&&n*2<=count;++n){bool matches=true;for(unsigned i=n;i<count;++i)if(row[i]!=row[i%n])matches=false;if(matches){period=n;break;}}
+  if(!period)return false;
+  for(int side=0;side<2;++side)for(int x=side?256:-(int)p->extraLeftCur;x<(side?256+p->extraRightCur:0);){
+    int column=(x+(int)phase)/(int)size;if(x+(int)phase<0)column=(x+(int)phase-(int)size+1)/(int)size;
+    int source=column%(int)period;if(source<0)source+=period;
+    p->vram[background_word(p,2,x+p->hScroll[2],line+p->vScroll[2])]=row[source];
+    x+=(int)size-((x+p->hScroll[2])&((int)size-1));
+  }
+  return true;
+}
+static void configure_dialog_backdrop(Ppu *p,unsigned line) {
+  bool scene_bg3=continue_dialog_scene_row(p,line);
+  /* Keep interior dialog cutouts at their authored coordinates. Viewport-
+   * pinned endpoints still follow the wider edge in the shared renderer. */
+  PpuSetWidescreenWindowExpansion(p,0,0);
+  /* Both scene backgrounds can be clipped at the waterline. Preserve their
+   * per-scanline windows. Keep scene objects while fixed HUD/text remains
+   * confined to the native center. */
+  p->screenWindowed[0] &= scene_bg3?23u:19u;
+  p->screenWindowed[1] &= scene_bg3?23u:19u;
+  p->windowsel &= scene_bg3?0xf0fffu:0xf00ffu;
   p->cgwsel &= 0x3f;
-  p->screenEnabled[0] &= ~(4u | 16u);
-  p->screenEnabled[1] &= ~(4u | 16u);
+  p->screenEnabled[0] &= scene_bg3?~0u:~4u;
+  p->screenEnabled[1] &= scene_bg3?~0u:~4u;
+  /* Scene OBJ (arrows, flowers, etc.) still belong to the landscape. Keep
+   * them; only fixed native HUD slots must not leak into the side columns. */
+  for(unsigned slot=0;slot<16;++slot)p->oam[slot*2]=0xf000;
 }
 
 
@@ -641,6 +701,9 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (!supported || !line || line > YI_WS_HEIGHT) return;
   if (line == 1) {
     ++frames;
+    unsigned mode=g_ram[0x118],shift=layout->pal?4u:0u;
+    if(mode==9+shift || mode==10+shift)title_route=true;
+    else if(mode!=0x1f+shift && (mode<0x20+shift || mode>0x29+shift))title_route=false;
     narrow_component=analyze_room_bounds();
     moving_columns_valid=moving_scanout_ready=false;
     presentation_wide = false;
@@ -671,6 +734,13 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
   /* Retain the native raster blanking; extend only visible scanlines sideways.
    * No vertical reconstruction, fixed crop or extra overlay is applied. */
   bool blank_band_line = PPU_forcedBlank(native) || PPU_brightness(native) == 0;
+  if(supported)raster_current[line-1]=(WsRasterDiagnostic){{line,g_ram[0x118],native->bgmode,
+    native->screenEnabled[0],native->screenEnabled[1],native->screenWindowed[0],native->screenWindowed[1],
+    native->windowsel,native->wbgobjlog,native->cgwsel,native->window1left,native->window1right,
+    native->window2left,native->window2right,native->bgXsc[0],native->bgXsc[1],native->bgXsc[2],
+    native->hScroll[0],native->hScroll[1],native->hScroll[2],native->vScroll[0],native->vScroll[1],native->vScroll[2],
+    rd16(g_ram+layout->message_ram),native->cgram[0],native->fixedColor}};
+
   if (supported && line == 112 && g_snes->cart->ramSize >= sizeof(diagnostic_gsu)) {
     diagnostic_ppu = *native;
     memcpy(diagnostic_ppu.vram, PpuRenderVram(native), sizeof(diagnostic_ppu.vram));
@@ -716,7 +786,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       PpuSetWidescreenWindowExpansion(&detached, 0x3f, 3);
       /* Text/HUD overlays stay in the authoritative 256-column center. */
       if (rd16(g_ram + layout->message_ram)) {
-        configure_dialog_backdrop(&detached);
+        configure_dialog_backdrop(&detached,line);
       }
       if (bonus_scene(native)) bonus_backdrop(&detached);
       if (tutorial_outro() || (level_overlay(native) && !((native->screenEnabled[0]|native->screenEnabled[1])&1))) detached.screenEnabled[0] |= 1;
@@ -747,7 +817,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
         /* Results use BG3 for text, not a periodic backdrop. Like pause,
          * keep their margins black even when CGRAM backdrop is non-black. */
         unsigned ui_kind=ui_scene(native);
-        if(ui_kind!=2 && ui_kind!=4) PpuRenderDetachedLegacyLineWithCoordinates(&detached, line, moving_columns_valid ? landscape_coordinates : NULL, NULL);
+        if(ui_kind!=2 && ui_kind!=4 && ui_kind!=5) PpuRenderDetachedLegacyLineWithCoordinates(&detached, line, moving_columns_valid ? landscape_coordinates : NULL, NULL);
         const uint8_t *row = pixels + (line - 1) * YI_WS_WIDTH * 4;
         for (unsigned x = 0; x < YI_WS_EXTRA; ++x) {
           if (row[x*4] || row[x*4+1] || row[x*4+2]) ++left_pixels;
@@ -773,19 +843,22 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
         g_ram[0x118] <= layout->gameplay_mode + 3;
     bool goal_transition = g_ram[0x118] == 0x1e + (layout->pal ? 4 : 0) ||
         g_ram[0x118] == 0x1f + (layout->pal ? 4 : 0);
-    if (!active && enabled && !narrow_component && !native_autoscroll_view() && !bonus_scene(native) &&
-        ((frame_tile_reason && !frame_reject && room_profile()) || game_transition || goal_transition)) {
+    bool title_load=title_route && (g_ram[0x118]==0x1f+(layout->pal?4:0) ||
+        (g_ram[0x118]>=0x20+(layout->pal?4:0) && g_ram[0x118]<=0x29+(layout->pal?4:0)));
+    if (!active && enabled && (!narrow_component || title_load) && !native_autoscroll_view() && !bonus_scene(native) &&
+        ((frame_tile_reason && !frame_reject && room_profile()) || game_transition || goal_transition || title_load)) {
       frame_diagnostic.cleared=1;
       /* No stale side pixels during room loading; native center is current. */
       for (unsigned y=0;y<224;++y) {
         memset(pixels+y*YI_WS_WIDTH*4,0,YI_WS_EXTRA*4);
         memset(pixels+(y*YI_WS_WIDTH+YI_WS_EXTRA+256)*4,0,YI_WS_EXTRA*4);
       }
-      presentation_wide = game_transition || goal_transition;
+      presentation_wide = game_transition || goal_transition || title_load;
       if (frame_tile_reason && !frame_reject && room_profile()) active = true;
     }
     /* Publish pixels and geometry together, only after a complete scanout.
      * This adds no frame delay: the host still receives this field at line224. */
+    memcpy(raster_presented,raster_current,sizeof(raster_presented));
     memcpy(presented_pixels,pixels,sizeof(pixels));
     presented_wide=active || presentation_wide;
     frame_diagnostic.ppu_last=native->bgmode;frame_diagnostic.main_last=native->screenEnabled[0];
@@ -884,6 +957,13 @@ void YiWs11CaptureTerrain(const char *path) {
     fclose(history);
   }
   size_t base=length>=suffix && !strcmp(path+length-suffix,"-terrain.bin")?length-suffix:length;
+  snprintf(history_path,sizeof(history_path),"%.*s-raster.csv",(int)base,path);
+  FILE *raster=fopen(history_path,"wb");
+  if(raster){
+    fprintf(raster,"line,game_mode,bgmode,main,sub,main_window,sub_window,windowsel,window_logic,cgwsel,window1_left,window1_right,window2_left,window2_right,bg1sc,bg2sc,bg3sc,h1,h2,h3,v1,v2,v3,message,backdrop,fixed_color\n");
+    for(unsigned y=0;y<224;++y){for(unsigned i=0;i<26;++i)fprintf(raster,"%s%u",i?",":"",raster_presented[y].value[i]);fputc('\n',raster);}
+    fclose(raster);
+  }
   snprintf(history_path,sizeof(history_path),"%.*s-history-native.bmp",(int)base,path);write_history_sheet(history_path,false);
   snprintf(history_path,sizeof(history_path),"%.*s-history-wide.bmp",(int)base,path);write_history_sheet(history_path,true);
 
