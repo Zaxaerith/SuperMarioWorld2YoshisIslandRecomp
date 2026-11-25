@@ -4,35 +4,32 @@
 #include <stdbool.h>
 #include <string.h>
 
-/* Host UI only: no ROM, save-state, renderer aspect or guest input binding changes. */
-typedef struct YiPauseMenu { bool open, confirm, quit, release_input, return_confirm, restart; int selected; } YiPauseMenu;
-/* The current return-to-title backend is a Windows process restart. Other
- * platforms keep the portable Continue/Quit menu and never offer that action. */
-static bool YiPauseMenuTitleSupported(void) {
-#if defined(_WIN32) && !defined(YI_TITLE_RESTART_UNAVAILABLE)
-  return true;
-#else
-  return false;
-#endif
-}
+/* Host overlay; native actions are queued separately at a frame boundary. */
+typedef struct YiPauseMenu { bool open, confirm, quit, release_input, return_confirm, restart, exit_level, can_exit_level; int selected; } YiPauseMenu;
+/* Machine reset is portable; window and renderer stay alive. */
+static bool YiPauseMenuTitleSupported(void) { return true; }
 static int YiPauseMenuButtonCount(const YiPauseMenu *m) {
-  return m->confirm || !YiPauseMenuTitleSupported() ? 2 : 3;
+  return m->confirm ? 2 : 4;
 }
 static void YiPauseMenuOpen(YiPauseMenu *m,bool confirm) {
-  m->open=true;m->confirm=confirm;m->selected=0;m->quit=false;m->restart=false;m->return_confirm=false;
+  m->open=true;m->confirm=confirm;m->selected=0;m->quit=false;m->restart=false;m->return_confirm=false;m->exit_level=false;
 }
 static void YiPauseMenuActivate(YiPauseMenu *m) {
+  if(!m->confirm && m->selected==2) {
+    if(m->can_exit_level){m->exit_level=true;m->open=false;m->release_input=true;}
+    return;
+  }
   if(!m->selected) {
     if(m->confirm){m->confirm=false;m->selected=0;}
     else {m->open=false;m->release_input=true;}
   } else if(m->confirm) {if(m->return_confirm)m->restart=true;else m->quit=true;}
   else {m->return_confirm=YiPauseMenuTitleSupported() && m->selected==1;m->confirm=true;m->selected=0;}
 }
-static void YiPauseMenuLayout(const YiPauseMenu *m,SDL_Renderer *r,SDL_Rect *panel,SDL_Rect buttons[3],int *unit) {
+static void YiPauseMenuLayout(const YiPauseMenu *m,SDL_Renderer *r,SDL_Rect *panel,SDL_Rect buttons[4],int *unit) {
   int w,h;SDL_RenderGetLogicalSize(r,&w,&h);
   if(w<=0 || h<=0)SDL_GetRendererOutputSize(r,&w,&h);
   int u=SDL_min(w/300,h/224);if(u<1)u=1;*unit=u;
-  int pw=SDL_min((m->confirm&&m->return_confirm?180:140)*u,w-8*u),ph=(m->confirm?(m->return_confirm?103:79):(YiPauseMenuTitleSupported()?100:79))*u;
+  int pw=SDL_min((m->confirm&&m->return_confirm?180:140)*u,w-8*u),ph=(m->confirm?(m->return_confirm?103:79):121)*u;
   *panel=(SDL_Rect){(w-pw)/2,(h-ph)/2,pw,ph};
   for(int i=0;i<YiPauseMenuButtonCount(m);++i)buttons[i]=(SDL_Rect){panel->x+8*u,panel->y+((m->confirm&&m->return_confirm?51:27)+21*i)*u,pw-16*u,17*u};
 }
@@ -69,7 +66,7 @@ static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) 
   }
   if(e->type==SDL_CONTROLLERBUTTONUP)return true;
   if(e->type==SDL_MOUSEMOTION || (e->type==SDL_MOUSEBUTTONDOWN && e->button.button==SDL_BUTTON_LEFT)) {
-    SDL_Rect panel,buttons[3];int unit;YiPauseMenuLayout(m,r,&panel,buttons,&unit);
+    SDL_Rect panel,buttons[4];int unit;YiPauseMenuLayout(m,r,&panel,buttons,&unit);
     SDL_Point point={e->type==SDL_MOUSEMOTION?e->motion.x:e->button.x,
                      e->type==SDL_MOUSEMOTION?e->motion.y:e->button.y};
     for(int i=0;i<YiPauseMenuButtonCount(m);++i)if(SDL_PointInRect(&point,&buttons[i])) {
@@ -117,7 +114,7 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
   Uint8 red,green,blue,alpha;SDL_BlendMode blend;
   SDL_GetRenderDrawColor(r,&red,&green,&blue,&alpha);SDL_GetRenderDrawBlendMode(r,&blend);
   SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);SDL_SetRenderDrawColor(r,0,0,0,150);SDL_RenderFillRect(r,NULL);
-  SDL_Rect panel,buttons[3];int u;YiPauseMenuLayout(m,r,&panel,buttons,&u);
+  SDL_Rect panel,buttons[4];int u;YiPauseMenuLayout(m,r,&panel,buttons,&u);
   SDL_SetRenderDrawColor(r,105,68,34,255);SDL_RenderFillRect(r,&panel);
   SDL_Rect inside={panel.x+2*u,panel.y+2*u,panel.w-4*u,panel.h-4*u};
   SDL_SetRenderDrawColor(r,18,62,45,255);SDL_RenderFillRect(r,&inside);
@@ -128,11 +125,13 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
     YiPauseMenuText(r,"WILL BE LOST",panel.x+panel.w/2,panel.y+35*u,u);
   }
   for(int i=0;i<YiPauseMenuButtonCount(m);++i) {
-    SDL_SetRenderDrawColor(r,i==m->selected?59:23,i==m->selected?108:73,i==m->selected?65:50,255);
+    bool disabled=!m->confirm && i==2 && !m->can_exit_level;
+    SDL_SetRenderDrawColor(r,disabled?35:i==m->selected?59:23,disabled?44:i==m->selected?108:73,disabled?39:i==m->selected?65:50,255);
     SDL_RenderFillRect(r,&buttons[i]);
     SDL_SetRenderDrawColor(r,i==m->selected?255:100,i==m->selected?220:128,i==m->selected?115:100,255);
-    SDL_RenderDrawRect(r,&buttons[i]);SDL_SetRenderDrawColor(r,255,255,235,255);
-    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RETURN TO TITLE":"QUIT"):"CANCEL"):(i==0?"CONTINUE":(i==1&&YiPauseMenuTitleSupported())?"RETURN TO TITLE":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
+    SDL_RenderDrawRect(r,&buttons[i]);
+    SDL_SetRenderDrawColor(r,disabled?105:255,disabled?120:255,disabled?110:235,255);
+    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RETURN TO TITLE":"QUIT"):"CANCEL"):(i==0?"CONTINUE":i==1?"RETURN TO TITLE":i==2?"EXIT LEVEL":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
   }
   SDL_SetRenderDrawColor(r,185,204,179,255);
   YiPauseMenuText(r,m->confirm?"ESC: CANCEL":"ESC: CONTINUE",panel.x+panel.w/2,panel.y+panel.h-9*u,SDL_max(1,u/2));

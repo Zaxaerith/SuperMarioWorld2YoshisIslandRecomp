@@ -12,6 +12,7 @@
 #include "yi_video_effects.h"
 #include "yi_pause_menu.h"
 #include "yi_title_restart.h"
+#include "yi_menu_game_input.h"
 #include "yi_effect_diagnostics.h"
 #include "yi_presentation.h"
 #include <string.h>
@@ -1061,8 +1062,7 @@ int main(int argc, char **argv) {
   bool capture_requested = false;
   bool running = true;
   YiPauseMenu pause_menu={0};
-  YiTitleRestart title_restart={0};
-  for(int i=1;i<argc;++i)if(!strcmp(argv[i],"--return-to-title"))pause_menu.release_input=true;
+  YiMenuGameInput menu_game_input={0};
   bool menu_audio_paused=false;
   SDL_Event event;
 
@@ -1073,12 +1073,29 @@ int main(int argc, char **argv) {
   printf("[Game] Entering %.3f Hz scanline execution loop...\n", YiRomFrameRate(s_rom_profile));
 
   while (running) {
+    pause_menu.can_exit_level=YiMenuCanExitLevel(g_ram,g_sram,s_rom_profile);
     while (SDL_PollEvent(&event)) {
       if(YiPauseMenuEvent(&pause_menu,renderer,&event)) {
         if(pause_menu.restart) {
-          if(YiTitleRestartReady(&title_restart,chosen_rom_path)){running=false;break;}
-          else {pause_menu.restart=false;SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Restart failed","The game could not be restarted. You can continue playing.",window);}
+          if(audio_dev)SDL_PauseAudioDevice(audio_dev,1);
+#ifdef RECOMP_LAUNCHER
+          const char *reset_save=g_active_sram_path;
+#else
+          const char *reset_save="save.srm";
+#endif
+          if(YiTitleRestartReady(reset_save,s_rom_profile)) {
+            g_audiobuffer_cur=g_audiobuffer_end=g_audiobuffer;
+            YiWs11Init(s_rom_profile);
+            menu_game_input=(YiMenuGameInput){.file_select=true};
+            pause_menu=(YiPauseMenu){.release_input=true};
+            next_frame_time=SDL_GetPerformanceCounter();
+            menu_audio_paused=true;
+          } else {
+            pause_menu.restart=false;
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Reset failed","The saved game could not be read. You can continue playing.",window);
+          }
         }
+        if(pause_menu.exit_level){menu_game_input.exit_ticks=6;pause_menu.exit_level=false;}
         if(pause_menu.quit)running=false;
         continue;
       }
@@ -1129,6 +1146,7 @@ int main(int argc, char **argv) {
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
     uint64_t emulation_start=SDL_GetPerformanceCounter();
     if(!pause_menu.open) {
+      s_pad_state=YiMenuGameInputNext(&menu_game_input,g_ram,s_rom_profile,s_pad_state);
       RtlRunFrame(s_pad_state);
       GameDrawPpuFrame();
     }
@@ -1176,7 +1194,7 @@ int main(int argc, char **argv) {
     YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
-    if (!pause_menu.open && ++s_frame_save_counter % 300 == 0) {
+    if (!pause_menu.open && !menu_game_input.file_select && ++s_frame_save_counter % 300 == 0) {
 #ifdef RECOMP_LAUNCHER
       save_sram(g_active_sram_path);
 #else
@@ -1244,7 +1262,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
   cleanup_timer_precision();
 #endif
-  if(pause_menu.restart && !YiTitleRestartFinish(&title_restart))return 1;
+
   return 0;
 }
 

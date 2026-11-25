@@ -463,7 +463,7 @@ void RtlReset(int mode) {
   g_audio_recovery_anchor_r = 0;
   g_audio_last_output_l = 0;
   g_audio_last_output_r = 0;
-  g_spc_player->initialize(g_spc_player);
+  if (g_spc_player) g_spc_player->initialize(g_spc_player);
   RtlApuUnlock();
 }
 

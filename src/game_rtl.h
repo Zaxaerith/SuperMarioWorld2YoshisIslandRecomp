@@ -10,6 +10,8 @@ void GameConfigureRom(YiRomProfile profile);
 void GameRunOneFrame(void);
 void GameDrawPpuFrame(void);
 void GameSessionReset(void);
+/* Call at a stopped frame boundary with audio paused. SRAM is preserved. */
+void GameMachineReset(YiRomProfile profile);
 uint32_t GameGetResumePc(void);
 
 extern const RtlGameInfo kGameInfo;

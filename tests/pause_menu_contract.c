@@ -29,7 +29,7 @@ int main(int argc,char **argv) {
   e=key(SDLK_ESCAPE,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.open && !m.confirm && m.selected==0);
   SDL_Event close={0};close.type=SDL_QUIT;YiPauseMenuEvent(&m,r,&close);CHECK(m.confirm && !m.quit && m.selected==0);
   e=key(SDLK_DOWN,false);YiPauseMenuEvent(&m,r,&e);e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);CHECK(m.quit);
-  YiPauseMenuOpen(&m,false);SDL_Rect panel,buttons[3];int unit;YiPauseMenuLayout(&m,r,&panel,buttons,&unit);
+  YiPauseMenuOpen(&m,false);SDL_Rect panel,buttons[4];int unit;YiPauseMenuLayout(&m,r,&panel,buttons,&unit);
   SDL_Event click={0};click.type=SDL_MOUSEBUTTONDOWN;click.button.button=SDL_BUTTON_LEFT;
   click.button.x=buttons[0].x+2;click.button.y=buttons[0].y+2;
   CHECK(YiPauseMenuEvent(&m,r,&click) && !m.open && !m.quit);
@@ -72,6 +72,11 @@ int main(int argc,char **argv) {
     e=key(SDLK_RETURN,false);YiPauseMenuEvent(&m,r,&e);
     CHECK(m.quit&&!m.restart);
   }
+  // Disabled exit cannot close the menu or inject Start/Select.
+  YiPauseMenuOpen(&m,false);m.selected=2;m.can_exit_level=false;
+  YiPauseMenuActivate(&m);CHECK(m.open&&!m.exit_level&&!m.confirm);
+  m.can_exit_level=true;YiPauseMenuActivate(&m);
+  CHECK(!m.open&&m.exit_level&&m.release_input&&!m.restart&&!m.quit);
   SDL_DestroyRenderer(r);SDL_FreeSurface(surface);SDL_Quit();
   puts("PASS pause UI: keyboard/mouse/controller, safe defaults, repeat rejection, input release, confirm/cancel and native/wide renderer state.");return 0;
 }

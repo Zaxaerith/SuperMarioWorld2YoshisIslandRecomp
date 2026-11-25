@@ -1,9 +1,7 @@
 # Return to title
 
-Esc opens Continue / Return to title / Quit. Returning to title requires confirmation with Cancel selected first. The confirmation warns that progress since the last save is lost. Keyboard, mouse and controller use the existing menu controls.
+The confirmed action resets the emulated machine in the current process and reloads the last persisted SRAM. The window, renderer, controller, audio device and launcher stay open. It makes no extra save write. A failed save read leaves the paused game resumable.
 
-On Windows the host prepares a suspended copy of the same executable with the verified current ROM, bypassing the launcher. Only after audio, controllers, optional services, save locks and SDL are closed does the replacement process start. A failed preparation leaves the current game paused and displays an error. Menu activation keys must be released before the replacement accepts gameplay input.
+CPU, interpreter cache, frame scheduler, PPU, SuperFX and audio delivery reset together. SRAM is read before changing the machine. The original boot runs normally; generated Start input skips its opening cinematic and enters file selection, stopping before any slot is selected. PAL language selection remains interactive when the original game requires it.
 
-Return to title skips the normal exit SRAM write: the fresh process loads the last persisted save from the same configured location. Normal Quit retains its existing save behavior. This does not create a save-state, alter game progression or change when the original game commits progress. PAL retains its normal language-selection boot flow. Optional integrations start fresh in the replacement process.
-
-Synthetic tests exercise confirmation/cancel, navigation, native/wide rendering, a suspended fixture child and failure handling. Actual ROM boot after restart requires gameplay validation. The current process-launch backend is Windows-only; other platforms omit Return to title and retain the portable Continue/Quit menu.
+The implementation is portable and contains no child-process launch. Synthetic tests cover all four ROM profiles, repeated reset, SRAM preservation, failed reads and input release at file selection. Actual boot and save reload still require gameplay validation.
