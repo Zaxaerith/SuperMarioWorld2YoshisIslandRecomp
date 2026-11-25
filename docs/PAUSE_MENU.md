@@ -1,6 +1,6 @@
 # Host pause menu
 
-Esc opens **Continue** (selected by default), **Return to title**, and **Quit**. Esc again resumes. Both Return to title and Quit require confirmation, with **Cancel** selected by default. Window-close requests use the Quit confirmation. Return to title warns that progress since the last save is lost.
+On Windows, Esc opens **Continue** (selected by default), **Return to title**, and **Quit**. Other platforms offer **Continue** and **Quit**. Esc again resumes. Both Return to title and Quit require confirmation, with **Cancel** selected by default. Window-close requests use the Quit confirmation. Return to title warns that progress since the last save is lost.
 
 Return to title restarts the same ROM on Windows, bypassing the launcher and loading the last persisted game save without an additional exit save write. Preparation failures keep the current game open. See [restart behavior](RETURN_TO_TITLE.md).
 
@@ -12,13 +12,12 @@ The SDL overlay restores renderer colour/blend state and does not change logical
 
 `pause_menu_contract` uses a synthetic SDL software surface, without a ROM or game execution. It checks safe defaults, repeat rejection, confirmation/cancel, release gating, keyboard/mouse/controller input and renderer-state preservation at native and wide logical sizes.
 
-## Size previews
+## Platform support and verification
 
-These show the actual overlay renderer over an F9 game capture, at the normal
-4:3 presentation size. They are rendered previews, not live menu screenshots.
+Return to title is offered only on Windows, where the current backend restarts the same executable and verified ROM. Other platforms retain Continue/Quit and never offer the unsupported action. This is a process restart, not an in-process game reset.
 
-![Pause menu](evidence/pause-menu/menu-preview.png)
+The portable menu path is also exercised by a ROM-free unsupported-backend contract. Actual Windows title restart and persisted save reload still require a short real-game acceptance check; synthetic process tests do not prove that flow.
 
-![Return-to-title confirmation](evidence/pause-menu/title-preview.png)
+F9 remains available while paused and captures the actual menu in the presentation image.
 
-![Quit confirmation](evidence/pause-menu/quit-preview.png)
+Review images and gameplay results belong in the [PR #11 discussion](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/pull/11), not in the source tree.

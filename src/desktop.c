@@ -1144,6 +1144,8 @@ int main(int argc, char **argv) {
     YiPresentTraceRecord(renderer,source,source_width,224,source_width*4,wide,g_video_effect);
     YiWs11FrameTiming((unsigned)((emulation_end-emulation_start)*1000000/perf_freq),
         (unsigned)((SDL_GetPerformanceCounter()-emulation_end)*1000000/perf_freq));
+    /* F9 records the real visible host menu, including confirmation. */
+    YiPauseMenuDraw(&pause_menu,renderer);
     if (capture_requested) {
       char native_path[128],wide_path[128],terrain_path[128],present_path[128],info_path[128];
       unsigned long long capture_id=(unsigned long long)SDL_GetPerformanceCounter();
@@ -1168,7 +1170,6 @@ int main(int argc, char **argv) {
       YiEffectsCapture(renderer,source,source_width,224,source_width*4,capture_id,(int)g_video_effect);
       capture_requested = false;
     }
-    YiPauseMenuDraw(&pause_menu,renderer);
     uint64_t present_start=SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer);
     YiPresentTracePresented((unsigned)((SDL_GetPerformanceCounter()-present_start)*1000000/perf_freq));

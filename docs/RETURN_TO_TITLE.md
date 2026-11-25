@@ -6,4 +6,4 @@ On Windows the host prepares a suspended copy of the same executable with the ve
 
 Return to title skips the normal exit SRAM write: the fresh process loads the last persisted save from the same configured location. Normal Quit retains its existing save behavior. This does not create a save-state, alter game progression or change when the original game commits progress. PAL retains its normal language-selection boot flow. Optional integrations start fresh in the replacement process.
 
-Synthetic tests exercise confirmation/cancel, navigation, native/wide rendering, a suspended fixture child and failure handling. Actual ROM boot after restart requires gameplay validation. The current process-launch backend is Windows-only; other platforms report that restart could not be prepared and keep the game open.
+Synthetic tests exercise confirmation/cancel, navigation, native/wide rendering, a suspended fixture child and failure handling. Actual ROM boot after restart requires gameplay validation. The current process-launch backend is Windows-only; other platforms omit Return to title and retain the portable Continue/Quit menu.

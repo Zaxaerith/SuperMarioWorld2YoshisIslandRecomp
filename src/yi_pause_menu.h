@@ -6,6 +6,18 @@
 
 /* Host UI only: no ROM, save-state, renderer aspect or guest input binding changes. */
 typedef struct YiPauseMenu { bool open, confirm, quit, release_input, return_confirm, restart; int selected; } YiPauseMenu;
+/* The current return-to-title backend is a Windows process restart. Other
+ * platforms keep the portable Continue/Quit menu and never offer that action. */
+static bool YiPauseMenuTitleSupported(void) {
+#if defined(_WIN32) && !defined(YI_TITLE_RESTART_UNAVAILABLE)
+  return true;
+#else
+  return false;
+#endif
+}
+static int YiPauseMenuButtonCount(const YiPauseMenu *m) {
+  return m->confirm || !YiPauseMenuTitleSupported() ? 2 : 3;
+}
 static void YiPauseMenuOpen(YiPauseMenu *m,bool confirm) {
   m->open=true;m->confirm=confirm;m->selected=0;m->quit=false;m->restart=false;m->return_confirm=false;
 }
@@ -14,15 +26,15 @@ static void YiPauseMenuActivate(YiPauseMenu *m) {
     if(m->confirm){m->confirm=false;m->selected=0;}
     else {m->open=false;m->release_input=true;}
   } else if(m->confirm) {if(m->return_confirm)m->restart=true;else m->quit=true;}
-  else {m->return_confirm=m->selected==1;m->confirm=true;m->selected=0;}
+  else {m->return_confirm=YiPauseMenuTitleSupported() && m->selected==1;m->confirm=true;m->selected=0;}
 }
 static void YiPauseMenuLayout(const YiPauseMenu *m,SDL_Renderer *r,SDL_Rect *panel,SDL_Rect buttons[3],int *unit) {
   int w,h;SDL_RenderGetLogicalSize(r,&w,&h);
   if(w<=0 || h<=0)SDL_GetRendererOutputSize(r,&w,&h);
   int u=SDL_min(w/300,h/224);if(u<1)u=1;*unit=u;
-  int pw=SDL_min((m->confirm&&m->return_confirm?180:140)*u,w-8*u),ph=(m->confirm?(m->return_confirm?103:79):100)*u;
+  int pw=SDL_min((m->confirm&&m->return_confirm?180:140)*u,w-8*u),ph=(m->confirm?(m->return_confirm?103:79):(YiPauseMenuTitleSupported()?100:79))*u;
   *panel=(SDL_Rect){(w-pw)/2,(h-ph)/2,pw,ph};
-  for(int i=0;i<(m->confirm?2:3);++i)buttons[i]=(SDL_Rect){panel->x+8*u,panel->y+((m->confirm&&m->return_confirm?51:27)+21*i)*u,pw-16*u,17*u};
+  for(int i=0;i<YiPauseMenuButtonCount(m);++i)buttons[i]=(SDL_Rect){panel->x+8*u,panel->y+((m->confirm&&m->return_confirm?51:27)+21*i)*u,pw-16*u,17*u};
 }
 static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) {
   if(e->type==SDL_QUIT){YiPauseMenuOpen(m,true);return true;}
@@ -36,18 +48,18 @@ static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) 
   if(e->type==SDL_KEYDOWN) {
     if(e->key.repeat)return true;
     SDL_Keycode key=e->key.keysym.sym;
-    if(key==SDLK_F11 || (key==SDLK_RETURN && (e->key.keysym.mod&KMOD_ALT)))return false;
+    if(key==SDLK_F9 || key==SDLK_F11 || (key==SDLK_RETURN && (e->key.keysym.mod&KMOD_ALT)))return false;
     if(key==SDLK_ESCAPE) {
       if(m->confirm){m->confirm=false;m->selected=0;}
       else {m->open=false;m->release_input=true;}
-    } else if(key==SDLK_UP || key==SDLK_DOWN || key==SDLK_LEFT || key==SDLK_RIGHT)m->selected=(m->selected+((key==SDLK_UP||key==SDLK_LEFT)?(m->confirm?1:2):1))%(m->confirm?2:3);
+    } else if(key==SDLK_UP || key==SDLK_DOWN || key==SDLK_LEFT || key==SDLK_RIGHT)m->selected=(m->selected+((key==SDLK_UP||key==SDLK_LEFT)?(YiPauseMenuButtonCount(m)-1):1))%YiPauseMenuButtonCount(m);
     else if(key==SDLK_RETURN || key==SDLK_SPACE)YiPauseMenuActivate(m);
     return true;
   }
   if(e->type==SDL_KEYUP)return true;
   if(e->type==SDL_CONTROLLERBUTTONDOWN) {
     unsigned b=e->cbutton.button;
-    if(b==SDL_CONTROLLER_BUTTON_DPAD_UP || b==SDL_CONTROLLER_BUTTON_DPAD_DOWN)m->selected=(m->selected+(b==SDL_CONTROLLER_BUTTON_DPAD_UP?(m->confirm?1:2):1))%(m->confirm?2:3);
+    if(b==SDL_CONTROLLER_BUTTON_DPAD_UP || b==SDL_CONTROLLER_BUTTON_DPAD_DOWN)m->selected=(m->selected+(b==SDL_CONTROLLER_BUTTON_DPAD_UP?(YiPauseMenuButtonCount(m)-1):1))%YiPauseMenuButtonCount(m);
     else if(b==SDL_CONTROLLER_BUTTON_A)YiPauseMenuActivate(m);
     else if(b==SDL_CONTROLLER_BUTTON_B || b==SDL_CONTROLLER_BUTTON_START) {
       if(m->confirm){m->confirm=false;m->selected=0;}
@@ -60,7 +72,7 @@ static bool YiPauseMenuEvent(YiPauseMenu *m,SDL_Renderer *r,const SDL_Event *e) 
     SDL_Rect panel,buttons[3];int unit;YiPauseMenuLayout(m,r,&panel,buttons,&unit);
     SDL_Point point={e->type==SDL_MOUSEMOTION?e->motion.x:e->button.x,
                      e->type==SDL_MOUSEMOTION?e->motion.y:e->button.y};
-    for(int i=0;i<(m->confirm?2:3);++i)if(SDL_PointInRect(&point,&buttons[i])) {
+    for(int i=0;i<YiPauseMenuButtonCount(m);++i)if(SDL_PointInRect(&point,&buttons[i])) {
       m->selected=i;if(e->type==SDL_MOUSEBUTTONDOWN)YiPauseMenuActivate(m);break;
     }
     return true;
@@ -115,12 +127,12 @@ static void YiPauseMenuDraw(const YiPauseMenu *m,SDL_Renderer *r) {
     YiPauseMenuText(r,"PROGRESS SINCE LAST SAVE",panel.x+panel.w/2,panel.y+24*u,u);
     YiPauseMenuText(r,"WILL BE LOST",panel.x+panel.w/2,panel.y+35*u,u);
   }
-  for(int i=0;i<(m->confirm?2:3);++i) {
+  for(int i=0;i<YiPauseMenuButtonCount(m);++i) {
     SDL_SetRenderDrawColor(r,i==m->selected?59:23,i==m->selected?108:73,i==m->selected?65:50,255);
     SDL_RenderFillRect(r,&buttons[i]);
     SDL_SetRenderDrawColor(r,i==m->selected?255:100,i==m->selected?220:128,i==m->selected?115:100,255);
     SDL_RenderDrawRect(r,&buttons[i]);SDL_SetRenderDrawColor(r,255,255,235,255);
-    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RETURN TO TITLE":"QUIT"):"CANCEL"):(i==0?"CONTINUE":i==1?"RETURN TO TITLE":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
+    YiPauseMenuText(r,m->confirm?(i?(m->return_confirm?"RETURN TO TITLE":"QUIT"):"CANCEL"):(i==0?"CONTINUE":(i==1&&YiPauseMenuTitleSupported())?"RETURN TO TITLE":"QUIT"),panel.x+panel.w/2,buttons[i].y+5*u,u);
   }
   SDL_SetRenderDrawColor(r,185,204,179,255);
   YiPauseMenuText(r,m->confirm?"ESC: CANCEL":"ESC: CONTINUE",panel.x+panel.w/2,panel.y+panel.h-9*u,SDL_max(1,u/2));
