@@ -190,7 +190,10 @@ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
           if (PPU_mode(ppu) == 2 || PPU_mode(ppu) == 4 || PPU_mode(ppu) == 6) {
             ppu_apply_offset_per_tile(ppu, curLayer, &lx, &ly);
           }
-          if (coordinates) coordinates(ppu, curLayer, x, y, &lx, &ly, context);
+          if (coordinates) {
+            coordinates(ppu, curLayer, x, y, &lx, &ly, context);
+            if (lx == INT_MIN || ly == INT_MIN) continue;
+          }
           pixel = ppu_sample_bg(
             ppu, lx & 0x3ff, ly & 0x3ff,
             curLayer, curPriority
