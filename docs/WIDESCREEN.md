@@ -61,3 +61,5 @@ When presentation_wide=0, wide.bmp is only a diagnostic buffer and may not be a 
 The large review screenshots and diagnostic captures have been removed from current
 `main` to keep the source tree lean. They remain available in the linked historic
 commit. New captures should be attached to PR discussions rather than committed.
+
+Bitmap boss bodies can extend from larger BG2 source canvases into the side margins. Each scanline uses its native scroll/mosaic mapping and clips at the finite source-canvas edges, preventing a repeated body on the opposite side. Narrow canvases keep their existing native-only behavior. The native center, guest CPU/PPU/RAM, camera and actor activation are unchanged. This uses existing rendered graphics; no additional SuperFX execution is required.

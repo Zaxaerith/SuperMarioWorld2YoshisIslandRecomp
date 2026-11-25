@@ -115,8 +115,8 @@ static bool burt_arena(void) {
       rd16(g_ram+0x218)==0 && rd16(g_ram+0x21a)==3 && rooms[0x3d].valid &&
       rd24(g_snes->cart->ram+0x2600)==rooms[0x3d].sprites;
 }
-/* Mode 12 uses the same native BG2 bitmap/Map16 terrain split as Salvo.
- * Keep that generated surface in the untouched center, extend terrain only. */
+/* Mode 12 uses a BG2 bitmap over Map16 terrain. Larger source canvases can
+ * supply real offscreen body pixels; narrow canvases retain native clipping. */
 static const RoomProfile *room_profile(void);
 static bool bitmap_arena(void) {
   const RoomProfile *room = room_profile();
@@ -400,6 +400,7 @@ static unsigned map_address(const Ppu *p, int x, int y) {
  * from the same moving rectangles and sine phase, after matching all native
  * columns. No guest table, movement, camera or activation is changed. */
 static bool moving_columns_valid, moving_scanout_ready;
+static unsigned bitmap_bg2_width;
 static uint8_t moving_rectangles[20*6];
 static int moving_sine, moving_camera_x, moving_camera_y;
 static int16_t moving_offsets[YI_WS_WIDTH];
@@ -453,6 +454,15 @@ static void prepare_moving_columns(const Ppu *p) {
 static void landscape_coordinates(const Ppu *p,int layer,int x,int line,
     int *lx,int *ly,const void *context) {
   (void)context;
+  if(bitmap_bg2_width && layer==1 && (x<0 || x>=256)) {
+    /* Follow the same finite copy as the adjacent native edge. HDMA scroll
+     * and mosaic have already been applied to lx/ly by the compositor. */
+    int scroll=p->hScroll[1],offset=*lx-scroll,mask=(int)bitmap_bg2_width-1;
+    int origin=x<0 ? scroll&mask : ((scroll+255)&mask)-255;
+    int source=origin+offset;
+    if(source<0 || source>=(int)bitmap_bg2_width)*lx=INT_MIN;
+    else *lx=source;
+  }
   if(moving_columns_valid && PPU_mode(p)==2 && layer==0 && (x<0 || x>=256)) {
     *lx=p->hScroll[0]+x;
     *ly=line+(moving_camera_y&1023)+moving_offsets[x+YI_WS_EXTRA];
@@ -699,6 +709,7 @@ static void configure_dialog_backdrop(Ppu *p,unsigned line) {
 
 void YiWs11RenderLine(const Ppu *native, unsigned line) {
   if (!supported || !line || line > YI_WS_HEIGHT) return;
+  bitmap_bg2_width=0;
   if (line == 1) {
     ++frames;
     unsigned mode=g_ram[0x118],shift=layout->pal?4u:0u;
@@ -790,7 +801,11 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
       }
       if (bonus_scene(native)) bonus_backdrop(&detached);
       if (tutorial_outro() || (level_overlay(native) && !((native->screenEnabled[0]|native->screenEnabled[1])&1))) detached.screenEnabled[0] |= 1;
-    if (bitmap_arena()) { detached.screenEnabled[0]&=~2u; detached.screenEnabled[1]&=~2u; }
+      if (bitmap_arena()) {
+        unsigned width=(PPU_bigTiles(native,1)?512u:256u)*(PPU_bgTilemapWider(native,1)?2u:1u);
+        if(PPU_mode(native)==1 && width>256)bitmap_bg2_width=width;
+        else { detached.screenEnabled[0]&=~2u; detached.screenEnabled[1]&=~2u; }
+      }
     if (ui_scene(native)) configure_ui_background(&detached,ui_scene(native));
       left_width = detached.extraLeftCur; right_width = detached.extraRightCur;
       if (line == 112) {
@@ -817,7 +832,7 @@ void YiWs11RenderLine(const Ppu *native, unsigned line) {
         /* Results use BG3 for text, not a periodic backdrop. Like pause,
          * keep their margins black even when CGRAM backdrop is non-black. */
         unsigned ui_kind=ui_scene(native);
-        if(ui_kind!=2 && ui_kind!=4 && ui_kind!=5) PpuRenderDetachedLegacyLineWithCoordinates(&detached, line, moving_columns_valid ? landscape_coordinates : NULL, NULL);
+        if(ui_kind!=2 && ui_kind!=4 && ui_kind!=5) PpuRenderDetachedLegacyLineWithCoordinates(&detached, line, (moving_columns_valid || bitmap_bg2_width) ? landscape_coordinates : NULL, NULL);
         const uint8_t *row = pixels + (line - 1) * YI_WS_WIDTH * 4;
         for (unsigned x = 0; x < YI_WS_EXTRA; ++x) {
           if (row[x*4] || row[x*4+1] || row[x*4+2]) ++left_pixels;

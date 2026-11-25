@@ -1086,6 +1086,47 @@ static int test_ws_detached_composition(void) {
         "bitmap boss path preserves original picture and all guest state");
     }
     }
+    /* A finite 512px boss bitmap contains genuine pixels outside the
+     * native window. Extend them on either side without repeating the image
+     * when scrolling reaches a source-canvas edge. HDMA may change per row. */
+    {
+      Ppu saved_bitmap=*g_ppu;
+      g_ram[0x118]=15;fixture_word(g_ram+0x146,12);
+      fixture_word(g_ram+3343,0);fixture_long(sram+0x2600,0x510000+0x70*8);
+      g_ppu->bgmode=0x21;g_ppu->bgXsc[1]=0x60;
+      g_ppu->bgTileAdr=(g_ppu->bgTileAdr&~0xf0u)|0x10;
+      g_ppu->screenEnabled[0]=3;g_ppu->screenEnabled[1]=0;
+      g_ppu->inidisp=15;g_ppu->windowsel=0;g_ppu->screenWindowed[0]=g_ppu->screenWindowed[1]=0;
+      g_ppu->cgwsel=g_ppu->cgadsub=0;g_ppu->mosaic=0;
+      for(unsigned i=0x1000;i<0x1400;++i)g_ppu->vram[i]=0;
+      const unsigned body_tiles[]={32,33,48,49};
+      for(unsigned k=0;k<4;++k)for(unsigned row=0;row<8;++row)g_ppu->vram[0x1000+body_tiles[k]*16+row]=0xff00;
+      for(unsigned row=0;row<32;++row)for(unsigned col=0;col<32;++col)
+        g_ppu->vram[0x6000+row*32+col]=0x2000|((col==1||col==30)?32:0);
+      g_ppu->cgram[2]=0x7c00;
+      memcpy(ram_before,g_ram,sizeof(ram_before));memcpy(sram_before,sram,sizeof(sram_before));cpu_before=g_cpu;
+      bool bitmap_unchanged=true;
+      for(unsigned line=1;line<=224;++line){
+        // Per-line scroll models the native HDMA bitmap placement.
+        unsigned phase=(line-1)%4;
+        g_ppu->hScroll[1]=phase==0?32:phase==1?224:phase==2?0:256;
+        ppu_runLine(g_ppu,line);before=*g_ppu;YiWs11RenderLine(g_ppu,line);
+        if(memcmp(&before,g_ppu,sizeof(before)))bitmap_unchanged=false;
+      }
+      TEST_ASSERT(wide[(32*YI_WS_WIDTH+YI_WS_EXTRA-8)*4]==255,
+        "finite boss bitmap supplies its actual left continuation");
+      TEST_ASSERT(wide[(33*YI_WS_WIDTH+YI_WS_EXTRA+265)*4]==255,
+        "finite boss bitmap supplies its actual right continuation");
+      TEST_ASSERT(wide[(34*YI_WS_WIDTH+YI_WS_EXTRA-24)*4+1]==255 &&
+                  wide[(35*YI_WS_WIDTH+YI_WS_EXTRA+272)*4+1]==255,
+        "finite boss bitmap does not wrap onto the opposite side of its canvas");
+      bool bitmap_center=true;
+      for(unsigned y=0;y<224;++y)if(memcmp(native+y*256*4,wide+(y*YI_WS_WIDTH+YI_WS_EXTRA)*4,256*4))bitmap_center=false;
+      TEST_ASSERT(bitmap_center&&bitmap_unchanged&&!memcmp(ram_before,g_ram,sizeof(ram_before))&&
+          !memcmp(sram_before,sram,sizeof(sram_before))&&!memcmp(&cpu_before,&g_cpu,sizeof(g_cpu)),
+        "boss bitmap expansion preserves native pixels, PPU, camera, actor RAM and CPU");
+      *g_ppu=saved_bitmap;
+    }
     fixture_word(g_ram+0x146,5);
     g_ram[0x118]=15;fixture_long(sram+0x2600,1475971);fixture_word(g_ram+0x21a,0);
     fixture_word(g_ram+3343,0);

@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
 
 #include "saveload.h"
 
@@ -607,6 +608,9 @@ void PpuSetWidescreenLineEnhancer(Ppu *ppu,
 /* Host-owned detached copy only. Evaluates OBJ and the existing legacy
  * compositor in the side margins only, without advancing the beam, guest
  * state, or native PPU. Caller copies the native center separately. */
+/* Set either source coordinate to INT_MIN to make this layer transparent.
+ * This lets a detached host sample a finite image without tilemap wrapping;
+ * native rendering and callers without an override keep hardware wrapping. */
 typedef void (*PpuBgCoordinateOverride)(const Ppu *ppu, int layer, int x,
     int line, int *lx, int *ly, const void *context);
 void PpuRenderDetachedLegacyLine(Ppu *detached, unsigned line);
