@@ -1,0 +1,235 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "requires": [
+        "start",
+        "settings.ini",
+        "settings.choices",
+        "settings.slider",
+        "settings.bindings"
+    ],
+    "game": {
+        "kind": "iso",
+        "label": "Your own USA Rev 1.0 Super Mario World 2: Yoshi's Island cartridge dump, as a .sfc (2,097,152 bytes) or .smc (2,097,664 bytes) file.",
+        "dumps": [
+            {
+                "name": "USA Rev 1.0",
+                "size": 2097152,
+                "crc32": "D138F224"
+            }
+        ]
+    },
+    "start": {
+        "program": [
+            "YoshisIslandRecomp.exe"
+        ],
+        "args": [
+            "--rom",
+            "{game}",
+            "--no-launcher"
+        ]
+    },
+    "config": [
+        {
+            "id": "main",
+            "format": "ini",
+            "file": [
+                {
+                    "path": "{install}/config.ini"
+                }
+            ],
+            "always": {
+                "General/SkipLauncher": "1"
+            }
+        },
+        {
+            "id": "keys",
+            "format": "ini",
+            "file": [
+                {
+                    "path": "{install}/keybinds.ini"
+                }
+            ]
+        }
+    ],
+    "folders": {
+        "saves": [
+            {
+                "path": "{install}/saves"
+            }
+        ]
+    },
+    "saves": [
+        "{install}/saves"
+    ],
+    "settings": [
+        {
+            "id": "window",
+            "label": "Window",
+            "help": "Windowed is a normal window. Borderless fills your screen without changing the resolution. Exclusive takes the screen over.",
+            "choices": [
+                {
+                    "label": "Windowed",
+                    "set": {
+                        "Graphics/Fullscreen": "0"
+                    }
+                },
+                {
+                    "label": "Borderless",
+                    "set": {
+                        "Graphics/Fullscreen": "1"
+                    }
+                },
+                {
+                    "label": "Exclusive",
+                    "set": {
+                        "Graphics/Fullscreen": "2"
+                    }
+                }
+            ],
+            "defaults": {
+                "Graphics/Fullscreen": "0"
+            }
+        },
+        {
+            "id": "scale",
+            "label": "Window scale",
+            "help": "How many times bigger than the SNES picture the game window is.",
+            "slider": {
+                "key": "Graphics/WindowScale",
+                "min": 1,
+                "max": 6,
+                "step": 1,
+                "format": "%d"
+            }
+        },
+        {
+            "id": "aspect",
+            "label": "Aspect ratio",
+            "help": "4:3 is how the picture looked on a CRT. 8:7 has square pixels. 1:1 fills a square frame.",
+            "choices": [
+                {
+                    "label": "4:3 (CRT)",
+                    "set": {
+                        "Graphics/DisplayAspect": "4:3"
+                    }
+                },
+                {
+                    "label": "8:7 (Square pixels)",
+                    "set": {
+                        "Graphics/DisplayAspect": "8:7"
+                    }
+                },
+                {
+                    "label": "1:1 (Square frame)",
+                    "set": {
+                        "Graphics/DisplayAspect": "1:1"
+                    }
+                }
+            ],
+            "defaults": {
+                "Graphics/DisplayAspect": "4:3"
+            }
+        },
+        {
+            "id": "smoothing",
+            "label": "Picture smoothing",
+            "help": "Sharp keeps the pixels crisp. Smooth blends them a little when the picture is scaled.",
+            "choices": [
+                {
+                    "label": "Sharp pixels",
+                    "set": {
+                        "Graphics/LinearFiltering": "0"
+                    }
+                },
+                {
+                    "label": "Smooth",
+                    "set": {
+                        "Graphics/LinearFiltering": "1"
+                    }
+                }
+            ],
+            "defaults": {
+                "Graphics/LinearFiltering": "1"
+            }
+        },
+        {
+            "id": "volume",
+            "label": "Volume",
+            "slider": {
+                "key": "Sound/Volume",
+                "min": 0,
+                "max": 100,
+                "step": 1,
+                "format": "%d"
+            }
+        },
+        {
+            "id": "keys",
+            "label": "Keyboard controls",
+            "help": "Keys for Player 1 when its input source is Keyboard.",
+            "in": "keys",
+            "bindings": {
+                "max": 1,
+                "actions": [
+                    {
+                        "label": "Jump",
+                        "key": "player1/b"
+                    },
+                    {
+                        "label": "Tongue, eat, spit",
+                        "key": "player1/y"
+                    },
+                    {
+                        "label": "Throw egg",
+                        "key": "player1/a"
+                    },
+                    {
+                        "label": "Lock aim",
+                        "key": "player1/x"
+                    },
+                    {
+                        "label": "Look left",
+                        "key": "player1/l"
+                    },
+                    {
+                        "label": "Look right",
+                        "key": "player1/r"
+                    },
+                    {
+                        "label": "Walk up",
+                        "key": "player1/up"
+                    },
+                    {
+                        "label": "Walk down",
+                        "key": "player1/down"
+                    },
+                    {
+                        "label": "Walk left",
+                        "key": "player1/left"
+                    },
+                    {
+                        "label": "Walk right",
+                        "key": "player1/right"
+                    },
+                    {
+                        "label": "Confirm or pause",
+                        "key": "player1/start"
+                    },
+                    {
+                        "label": "Item bag",
+                        "key": "player1/select"
+                    }
+                ]
+            }
+        }
+    ],
+    "actions": [
+        {
+            "id": "saves",
+            "label": "Saves",
+            "help": "Your battery save, saves/save.srm.",
+            "open": "saves"
+        }
+    ]
+}
