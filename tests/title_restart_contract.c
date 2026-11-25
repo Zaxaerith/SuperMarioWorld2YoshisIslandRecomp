@@ -49,12 +49,14 @@ int main(void){
   g_sram[0x1ae]=1;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));g_sram[0x1ae]=0;
   g_ram[0x118]=0x22+shift;CHECK(!YiMenuCanExitLevel(g_ram,g_sram,(YiRomProfile)profile));
   YiMenuGameInput input={.exit_ticks=6};
-  for(unsigned i=0;i<6;++i)CHECK(YiMenuGameInputNext(&input,g_ram,(YiRomProfile)profile,0xffff)==(i>=2&&i<4?12:0));
-  CHECK(YiMenuGameInputNext(&input,g_ram,(YiRomProfile)profile,0x123)==0x123);
-  input=(YiMenuGameInput){.file_select=true};g_ram[0x118]=10+shift;
-  bool start=false;for(unsigned i=0;i<31;++i)start|=YiMenuGameInputNext(&input,g_ram,(YiRomProfile)profile,0xffff)==8;
-  CHECK(start);g_ram[0x214]=1;CHECK(YiMenuGameInputNext(&input,g_ram,(YiRomProfile)profile,0xffff)==0&&!input.file_select);
-  for(unsigned i=0;i<60;++i)CHECK(!YiMenuGameInputNext(&input,g_ram,(YiRomProfile)profile,0));
+  for(unsigned i=0;i<6;++i)CHECK(YiMenuGameInputNext(&input,0xffff)==(i>=2&&i<4?12:0));
+  CHECK(YiMenuGameInputNext(&input,0x123)==0x123);
+  // A reset never synthesizes Start: intro, title and file selection wait
+  // for the player, while actual user input passes through unchanged.
+  input=(YiMenuGameInput){0};
+  for(unsigned i=0;i<180;++i)CHECK(!YiMenuGameInputNext(&input,0));
+  CHECK(YiMenuGameInputNext(&input,8)==8);
+  CHECK(YiMenuGameInputNext(&input,0x123)==0x123);
  }
  // Short reads must leave the live game fully resumable.
  f=fopen(path,"wb");CHECK(f);fputc(1,f);CHECK(!fclose(f));
@@ -62,5 +64,5 @@ int main(void){
  CHECK(!YiTitleRestartReady(path,YI_ROM_US_10));
  CHECK(g_ram[123]==77&&g_cpu.A==0x4242&&RtlStateGeneration()==generation);
  CHECK(!remove(path));free(saved);
- puts("PASS: four-profile in-process reset, saved SRAM reload, failed-read preservation, native Exit level eligibility, input sequencing and file-selection release. No game execution.");return 0;
+ puts("PASS: four-profile in-process reset, saved SRAM reload, failed-read preservation, native Exit level eligibility, input sequencing and manual title input. No game execution.");return 0;
 }

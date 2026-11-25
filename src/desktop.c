@@ -1086,7 +1086,7 @@ int main(int argc, char **argv) {
           if(YiTitleRestartReady(reset_save,s_rom_profile)) {
             g_audiobuffer_cur=g_audiobuffer_end=g_audiobuffer;
             YiWs11Init(s_rom_profile);
-            menu_game_input=(YiMenuGameInput){.file_select=true};
+            menu_game_input=(YiMenuGameInput){0};
             pause_menu=(YiPauseMenu){.release_input=true};
             next_frame_time=SDL_GetPerformanceCounter();
             menu_audio_paused=true;
@@ -1146,7 +1146,7 @@ int main(int argc, char **argv) {
     /* Run one full hardware frame (262 scanlines, AOT dispatched + SuperFX + PPU) */
     uint64_t emulation_start=SDL_GetPerformanceCounter();
     if(!pause_menu.open) {
-      s_pad_state=YiMenuGameInputNext(&menu_game_input,g_ram,s_rom_profile,s_pad_state);
+      s_pad_state=YiMenuGameInputNext(&menu_game_input,s_pad_state);
       RtlRunFrame(s_pad_state);
       GameDrawPpuFrame();
     }
@@ -1194,7 +1194,7 @@ int main(int argc, char **argv) {
     YiEffectsRecord(g_video_effect,source_width,224,filter_ticks,vsync_requested);
 
     static uint32_t s_frame_save_counter = 0;
-    if (!pause_menu.open && !menu_game_input.file_select && ++s_frame_save_counter % 300 == 0) {
+    if (!pause_menu.open && ++s_frame_save_counter % 300 == 0) {
 #ifdef RECOMP_LAUNCHER
       save_sram(g_active_sram_path);
 #else
