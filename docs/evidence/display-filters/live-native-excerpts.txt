@@ -1,6 +1,0 @@
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=251 seconds=5.012 fps=50.080 filter_ms=0.2656 cpu_one_core_pct=22.45
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=251 seconds=5.020 fps=49.998 filter_ms=0.2625 cpu_one_core_pct=28.32
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=251 seconds=5.019 fps=50.010 filter_ms=0.2645 cpu_one_core_pct=26.15
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=251 seconds=5.020 fps=50.003 filter_ms=0.2651 cpu_one_core_pct=27.39
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=251 seconds=5.019 fps=50.011 filter_ms=0.2626 cpu_one_core_pct=27.40
-[EffectsPerf] mode=Sharp source=256x224 vsync=1 frames=250 seconds=5.001 fps=49.993 filter_ms=0.2615 cpu_one_core_pct=30.62

@@ -48,4 +48,7 @@ widescreen is active.
 
 ## Reviewed Windows gameplay evidence
 
-See [screenshots, measurements and integration limits](evidence/DISPLAY_FILTERS_REVIEW.md).
+The original screenshots, measurements and integration review are preserved in the
+[archived PR #6 evidence snapshot](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/blob/d70767c4230ec571750adb8d4ceb8f5a81ad4c3d/docs/evidence/DISPLAY_FILTERS_REVIEW.md). These large review
+attachments were removed from current `main`; new captures should be attached
+to pull requests instead of committed to the source tree.
