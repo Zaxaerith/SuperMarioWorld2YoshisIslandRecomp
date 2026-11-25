@@ -10,4 +10,4 @@ The overlay preserves renderer state. Camera, enemy activation, filtering and na
 
 Synthetic tests check navigation, disabled actions, confirmation, input release, renderer-state preservation and the reset/input lifecycle across all four ROM profiles. Review images belong in the [PR #11 discussion](https://github.com/Zaxaerith/SuperMarioWorld2YoshisIslandRecomp/pull/11), not in the source tree.
 
-Player testing confirmed that Restart game restarts in the same window and Exit level works only in completed levels. The automatic Start input used in that test has since been removed; the player now advances the intro manually.
+Player testing confirmed that Restart game restarts in the same window and Exit level works only in completed levels. The final manual-start build was also tested: restarting from a level retained the expected saved slots.
